@@ -52,10 +52,11 @@ it('claims once under a setup race and locks each client independently', async (
   ]);
   expect(setupResponses.map((response) => response.status).sort())
     .toEqual([200, 403]);
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     const response = await post(login, { password: 'wrong-password' });
-    expect([401, 403]).toContain(response.status);
+    expect(response.status).toBe(401);
   }
+  expect((await post(login, { password: 'wrong-password' })).status).toBe(429);
   const sixth = await post(login, { password: 'wrong-password' });
   expect([423, 429]).toContain(sixth.status);
   const otherClient = await post(
@@ -78,7 +79,7 @@ it('claims once under a setup race and locks each client independently', async (
     cookie.includes('Secure'))).toBe(true);
 
   process.env.TRUST_PROXY_HOPS = '0';
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     const response = await login(new NextRequest('http://test', {
       method: 'POST',
       headers: {
@@ -89,6 +90,11 @@ it('claims once under a setup race and locks each client independently', async (
     }));
     expect(response.status).toBe(401);
   }
+  expect((await login(new NextRequest('http://test', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password: 'wrong-password' }),
+  }))).status).toBe(429);
   const directLogin = await login(new NextRequest('http://test', {
     method: 'POST',
     headers: {
@@ -97,5 +103,5 @@ it('claims once under a setup race and locks each client independently', async (
     },
     body: JSON.stringify({ password: 'the-real-password-123' }),
   }));
-  expect(directLogin.status).toBe(200);
+  expect(directLogin.status).toBe(429);
 });

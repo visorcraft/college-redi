@@ -8,6 +8,7 @@ import {
 
 let env: TestEnv;
 let embedded: KitDatabase;
+const remoteSqlOptions: Array<{ timeoutMs?: number } | undefined> = [];
 
 beforeAll(async () => {
   env = makeTestEnv({ REDI_MASTER_KEY: 'ab'.repeat(32) });
@@ -18,7 +19,10 @@ beforeAll(async () => {
   await runMigrations(embedded);
 
   const remote = Object.assign(Object.create(RemoteDatabase.prototype), {
-    sql: embedded.sql.bind(embedded),
+    sql: (statement: string, options?: { timeoutMs?: number }) => {
+      remoteSqlOptions.push(options);
+      return embedded.sql(statement);
+    },
   }) as RemoteDatabase;
   (globalThis as typeof globalThis & { __rediDb?: unknown }).__rediDb = remote;
 });
@@ -30,6 +34,13 @@ afterAll(() => {
 });
 
 describe('Phase 1 remote-mode core parity', () => {
+  it('bounds ordinary remote SQL calls', async () => {
+    remoteSqlOptions.length = 0;
+    const { sqlRows } = await import('../../src/server/db/sql');
+    await sqlRows('SELECT id FROM app_settings');
+    expect(remoteSqlOptions).toEqual([{ timeoutMs: 30_000 }]);
+  });
+
   it('settings and encrypted secrets work through SQL only', async () => {
     const { getKitDb } = await import('../../src/server/db/client');
     await expect(getKitDb()).rejects.toThrow(/unavailable in remote mode/);

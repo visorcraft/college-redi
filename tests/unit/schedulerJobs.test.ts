@@ -118,6 +118,11 @@ describe('daily digest (spec §6.5.2)', () => {
     expect(rows[0]?.body).toContain('Due today thing');
     expect(rows[0]?.body).toContain('Next week thing');
     expect(rows[0]?.channels).toBe('["in_app","email"]');
+    expect(await jobs.runDailyDigestJob(NOW)).toEqual({
+      sent: false,
+      reason: 'already_sent',
+    });
+    expect(await notesOf('digest')).toHaveLength(1);
   });
 
   it('uses the configured local day across the DST boundary', async () => {
@@ -176,6 +181,14 @@ describe('registration sweep (spec §6.2, Appendix C hourly)', () => {
     await jobs.runRegistrationSweepJob(NOW);
     expect((await notesOf('registration_window'))
       .some((n) => n.title.includes('still have 1 unregistered'))).toBe(true);
+  });
+
+  it('uses the configured local ISO week for weekly reminder identity', async () => {
+    await updateSettings({ timezone: 'America/Chicago' });
+    expect(jobs.isoWeekKey(new Date('2027-01-04T00:30:00.000Z'), 'America/Chicago'))
+      .toBe('2026-W53');
+    expect(jobs.isoWeekKey(new Date('2027-01-04T00:30:00.000Z'), 'UTC'))
+      .toBe('2027-W01');
   });
 });
 

@@ -91,6 +91,18 @@ describe('task tools', () => {
     expect(cleared.due_at).toBeNull();
   });
 
+  it('normalizes date-only deadlines to end of day in the configured timezone', async () => {
+    await updateSettings({ timezone: 'America/Chicago' });
+    const task = await create({ due_at: '2026-09-01' });
+    expect(task.due_at).toBe('2026-09-02T04:59:59.999Z');
+    const updated = await callTool(
+      'update_task',
+      { id: task.id, due_at: '2026-12-01' },
+      CTX,
+    ) as TaskDto;
+    expect(updated.due_at).toBe('2026-12-02T05:59:59.999Z');
+  });
+
   it('completes, dismisses, and cancels pending reminders', async () => {
     const task = await create();
     await sqlExec(

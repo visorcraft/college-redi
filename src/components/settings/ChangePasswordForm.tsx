@@ -20,7 +20,7 @@ export function ChangePasswordForm() {
         body: { current_password: current, new_password: next },
       });
       setCurrent(''); setNext(''); setConfirm('');
-      setStatus({ ok: true, text: 'Password updated. Your existing sessions stay signed in.' });
+      setStatus({ ok: true, text: 'Password updated. Other sessions were signed out.' });
     } catch (err) {
       setStatus({ ok: false, text: err instanceof Error ? err.message : String(err) });
     }

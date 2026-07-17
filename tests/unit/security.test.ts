@@ -11,6 +11,7 @@ import {
   rateLimitExceeded,
   requestRateLimitExceeded,
 } from '../../src/server/security';
+import middleware from '../../src/middleware';
 
 function req(
   url: string,
@@ -126,6 +127,29 @@ describe('CSRF double-submit', () => {
 });
 
 describe('rate limiter', () => {
+  it('cheaply rejects excess login requests before the route runs', async () => {
+    const previous = process.env.TRUST_PROXY_HOPS;
+    process.env.TRUST_PROXY_HOPS = '1';
+    try {
+      const ip = `203.0.113.${Math.floor(Math.random() * 200) + 1}`;
+      for (let i = 0; i < 10; i += 1) {
+        const response = await middleware(req(
+          'http://localhost/api/auth/login',
+          { method: 'POST', headers: { 'x-forwarded-for': ip } },
+        ));
+        expect(response.status).toBe(200);
+      }
+      const blocked = await middleware(req(
+        'http://localhost/api/auth/login',
+        { method: 'POST', headers: { 'x-forwarded-for': ip } },
+      ));
+      expect(blocked.status).toBe(429);
+    } finally {
+      if (previous === undefined) delete process.env.TRUST_PROXY_HOPS;
+      else process.env.TRUST_PROXY_HOPS = previous;
+    }
+  });
+
   it('allows the limit, rejects excess, then resets', () => {
     const key = `test:${crypto.randomUUID()}`;
     for (let i = 0; i < 3; i += 1) {

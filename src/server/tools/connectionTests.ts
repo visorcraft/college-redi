@@ -5,13 +5,14 @@ import nodemailer from 'nodemailer';
 import twilio from 'twilio';
 import { getSettings } from '../settings';
 import { getSecret } from '../secrets';
-import { getDb } from '../db/client';
+import { lit, sqlExec } from '../db/sql';
 import { getAiClient, AiNotConfiguredError } from '../ai/client';
 
 type Ctx = { actor: string };
 const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 const EMPTY_JSON_SCHEMA = { type: 'object', properties: {}, additionalProperties: false } as const;
+const CONNECTION_TEST_TIMEOUT_MS = 10_000;
 
 const testAiConnection = {
   name: 'test_ai_connection',
@@ -90,6 +91,9 @@ async function sendSmtpMail(subject: string, text: string) {
     secure: smtp.security === 'tls',
     requireTLS: smtp.security === 'starttls',
     auth: { user: smtp.username, pass: password! },
+    connectionTimeout: CONNECTION_TEST_TIMEOUT_MS,
+    greetingTimeout: CONNECTION_TEST_TIMEOUT_MS,
+    socketTimeout: CONNECTION_TEST_TIMEOUT_MS,
   });
   try {
     await transporter.verify();
@@ -143,6 +147,9 @@ const testImapConnection = {
       secure: imap.tls !== false,
       auth: { user: imap.username, pass: password! },
       logger: false,
+      connectionTimeout: CONNECTION_TEST_TIMEOUT_MS,
+      greetingTimeout: CONNECTION_TEST_TIMEOUT_MS,
+      socketTimeout: CONNECTION_TEST_TIMEOUT_MS,
     });
     try {
       await client.connect();
@@ -196,11 +203,10 @@ const sendTestNotification = {
   async handler(_ctx: Ctx, params: { channel: 'in_app' | 'email' | 'sms' }) {
     void _ctx;
     if (params.channel === 'in_app') {
-      const db = await getDb();
       const id = randomUUID();
       const now = new Date().toISOString();
-      await db.sql(
-        `INSERT INTO notifications (id, type, title, body, importance, channels, scheduled_for, status, related_type, related_id, created_at, sent_at) VALUES ('${id}', 'system', '☁️ Redi test', 'This is how in-app messages from Redi look.', 'normal', '["in_app"]', '${now}', 'sent', NULL, NULL, '${now}', '${now}')`,
+      await sqlExec(
+        `INSERT INTO notifications (id, type, title, body, importance, channels, scheduled_for, status, related_type, related_id, created_at, sent_at) VALUES (${lit(id)}, 'system', '☁️ Redi test', 'This is how in-app messages from Redi look.', 'normal', '["in_app"]', ${lit(now)}, 'sent', NULL, NULL, ${lit(now)}, ${lit(now)})`,
       );
       return { ok: true, channel: 'in_app', notification_id: id };
     }

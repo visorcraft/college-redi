@@ -1,5 +1,6 @@
 import { lit, sqlExec, sqlRows } from './db/sql';
 import { AppSettingsSchema, type AppSettings, type SettingsPatch } from '../lib/schemas/settings';
+import { getConfig } from './config';
 
 const ROW_ID = 1;
 let updateTail: Promise<void> = Promise.resolve();
@@ -22,7 +23,7 @@ export async function getSettings(): Promise<AppSettings> {
     `SELECT payload FROM app_settings WHERE id = ${ROW_ID}`,
   ))[0];
   if (!row) {
-    const fresh = AppSettingsSchema.parse({});
+    const fresh = AppSettingsSchema.parse({ timezone: getConfig().TZ ?? 'UTC' });
     await sqlExec(
       `INSERT INTO app_settings (id, payload, updated_at) VALUES (` +
       `${ROW_ID}, ${lit(JSON.stringify(fresh))}, ${lit(new Date())})`,

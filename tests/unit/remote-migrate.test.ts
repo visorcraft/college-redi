@@ -58,7 +58,8 @@ describe('remote migrations', () => {
     const descriptors = new Map<string, ReturnType<typeof descriptor>>();
     const versions = new Set<number>();
     let alterCount = 0;
-    const sql = vi.fn(async (statement: string) => {
+    const sql = vi.fn(async (statement: string, options?: { timeoutMs?: number }) => {
+      expect(options?.timeoutMs).toBe(30_000);
       if (statement.startsWith('CREATE TABLE IF NOT EXISTS "__redi_schema_migrations"')) {
         tables.add('__redi_schema_migrations');
       } else if (statement.startsWith('SELECT "version"')) {
@@ -82,6 +83,7 @@ describe('remote migrations', () => {
       sql,
     }) as RemoteDatabase;
     const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
       const url = String(_input);
       if (url.endsWith('/kit/create_table')) {
         const definition = JSON.parse(String(init?.body)) as ReturnType<typeof remoteTableDefinition>;

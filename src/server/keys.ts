@@ -19,6 +19,7 @@ export async function getMasterKey(): Promise<Buffer> {
   try {
     const existing = await readFile(keyPath);
     if (existing.length === 32) {
+      await chmod(keyPath, 0o600);
       cachedMasterKey = existing;
       return existing;
     }

@@ -27,8 +27,27 @@ export const DEFAULT_REMINDER_POLICY: ReminderPolicy = {
   awaiting_renag_days: 7,
 };
 
-const dueAtInput = z.string().min(10).refine(
-  (value) => !Number.isNaN(Date.parse(value.length === 10 ? `${value}T23:59:59.999Z` : value)),
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DATETIME_WITH_ZONE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function validDueAt(value: string): boolean {
+  const date = value.slice(0, 10);
+  if (!ISO_DATE.test(date)) return false;
+  const [year, month, day] = date.split('-').map(Number);
+  const parsedDate = new Date(Date.UTC(year!, month! - 1, day!));
+  if (
+    parsedDate.getUTCFullYear() !== year
+    || parsedDate.getUTCMonth() !== month! - 1
+    || parsedDate.getUTCDate() !== day
+  ) return false;
+  return value.length === 10
+    ? true
+    : ISO_DATETIME_WITH_ZONE.test(value) && !Number.isNaN(Date.parse(value));
+}
+
+export const dueAtInputSchema = z.string().min(10).refine(
+  validDueAt,
   { message: 'due_at must be an ISO date (YYYY-MM-DD) or datetime' },
 );
 
@@ -36,7 +55,7 @@ export const createTaskParamsSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(4000).nullish(),
   category: taskCategorySchema.default('other'),
-  due_at: dueAtInput.nullish(),
+  due_at: dueAtInputSchema.nullish(),
   reminder_policy: reminderPolicySchema.nullish(),
   source: z.enum(TASK_SOURCE_VALUES).default('manual'),
   source_email_id: z.string().nullish(),
@@ -48,7 +67,7 @@ export const updateTaskParamsSchema = z.object({
   description: z.string().max(4000).nullish(),
   category: taskCategorySchema.optional(),
   status: z.enum(['pending', 'awaiting_confirmation']).optional(),
-  due_at: dueAtInput.nullish(),
+  due_at: dueAtInputSchema.nullish(),
   reminder_policy: reminderPolicySchema.nullish(),
 });
 
@@ -70,7 +89,7 @@ export const pendingChecklistEntrySchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(4000).nullish(),
   category: taskCategorySchema.default('other'),
-  due_at: dueAtInput.nullish(),
+  due_at: dueAtInputSchema.nullish(),
   materialized: z.boolean().optional(),
 }).loose();
 

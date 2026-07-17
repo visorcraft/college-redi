@@ -145,8 +145,34 @@ describe('auth flow (booted app, temp data dir)', () => {
     expect(me.authenticated).toBe(true);
   });
 
+  it('password change keeps this session and invalidates other sessions', async () => {
+    const oldSession = new Map(jar);
+    const changed = await fetch(`${srv.baseUrl}/api/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: cookieHeader(jar),
+        'x-csrf-token': jar.get('redi_csrf') ?? '',
+      },
+      body: JSON.stringify({
+        current_password: PASSWORD,
+        new_password: 'new correct horse battery staple',
+      }),
+    });
+    expect(changed.status).toBe(200);
+    jarFrom(changed, jar);
+    const current = await (await fetch(`${srv.baseUrl}/api/auth/me`, {
+      headers: { cookie: cookieHeader(jar) },
+    })).json();
+    const old = await (await fetch(`${srv.baseUrl}/api/auth/me`, {
+      headers: { cookie: cookieHeader(oldSession) },
+    })).json();
+    expect(current.authenticated).toBe(true);
+    expect(old.authenticated).toBe(false);
+  });
+
   it('locks out after 5 failed logins (429)', async () => {
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 4; i++) {
       const res = await fetch(`${srv.baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -154,6 +180,12 @@ describe('auth flow (booted app, temp data dir)', () => {
       });
       expect(res.status).toBe(401);
     }
+    const threshold = await fetch(`${srv.baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'wrong-threshold' }),
+    });
+    expect(threshold.status).toBe(429);
     const locked = await fetch(`${srv.baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -165,8 +197,8 @@ describe('auth flow (booted app, temp data dir)', () => {
     const correct = await fetch(`${srv.baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: PASSWORD }),
+      body: JSON.stringify({ password: 'new correct horse battery staple' }),
     });
-    expect(correct.status).toBe(200);
+    expect(correct.status).toBe(429);
   });
 });

@@ -27,6 +27,7 @@ describe('withSqlTransaction remote mode', () => {
     const statements: Array<{ sql: string; session: string | null }> = [];
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL, init?: RequestInit) => {
       const path = new URL(String(input)).pathname;
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
       if (path === '/sessions' && init?.method === 'POST') {
         return Response.json({ session_id: 'session-1' });
       }

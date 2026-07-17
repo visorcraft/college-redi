@@ -153,6 +153,15 @@ describe('triageMessages', () => {
     expect(recording.calls[0].user).not.toContain('x'.repeat(4001));
   });
 
+  it('uses the student local date near a UTC day boundary', () => {
+    const { system } = buildTriagePrompt(
+      [message()],
+      'America/New_York',
+      new Date('2026-07-18T01:00:00Z'),
+    );
+    expect(system).toContain('Today is 2026-07-17');
+  });
+
   it('chunks more than 10 messages into multiple calls', async () => {
     const ten = JSON.stringify({
       results: Array.from({ length: 10 }, (_, index) => ({

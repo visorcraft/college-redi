@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ImapFlow } from 'imapflow';
+import nodemailer from 'nodemailer';
 
 const mocks = vi.hoisted(() => ({
-  getSettings: vi.fn(), getSecret: vi.fn(), getDb: vi.fn(), sql: vi.fn(),
+  getSettings: vi.fn(), getSecret: vi.fn(), sqlExec: vi.fn(),
   getAiClient: vi.fn(), aiCreate: vi.fn(),
   imapConnect: vi.fn(), mailboxOpen: vi.fn(), imapStatus: vi.fn(), imapLogout: vi.fn(),
   smtpVerify: vi.fn(), sendMail: vi.fn(),
@@ -10,7 +12,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/server/settings', () => ({ getSettings: mocks.getSettings, updateSettings: vi.fn() }));
 vi.mock('@/server/secrets', () => ({ getSecret: mocks.getSecret, setSecret: vi.fn() }));
-vi.mock('@/server/db/client', () => ({ getDb: mocks.getDb }));
+vi.mock('@/server/db/sql', () => ({
+  lit: (value: string) => `'${value.replaceAll("'", "''")}'`,
+  sqlExec: mocks.sqlExec,
+}));
 vi.mock('@/server/ai/client', () => {
   class AiNotConfiguredError extends Error {}
   return { getAiClient: mocks.getAiClient, AiNotConfiguredError };
@@ -53,7 +58,6 @@ beforeEach(() => {
   mocks.getSettings.mockResolvedValue(settingsFixture);
   mocks.getSecret.mockImplementation(async (name: string) =>
     ({ 'imap.password': 'pw-imap', 'smtp.password': 'pw-smtp', 'twilio.auth_token': 'tok' })[name] ?? null);
-  mocks.getDb.mockResolvedValue({ sql: mocks.sql });
   mocks.getAiClient.mockResolvedValue({
     client: { chat: { completions: { create: mocks.aiCreate } } },
     model: 'gpt-5.6-luna', effort: 'medium',
@@ -137,6 +141,11 @@ describe('test_imap_connection', () => {
     expect(mocks.imapConnect).toHaveBeenCalledTimes(1);
     expect(mocks.mailboxOpen).toHaveBeenCalledWith('INBOX', { readOnly: true });
     expect(mocks.imapLogout).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(ImapFlow)).toHaveBeenCalledWith(expect.objectContaining({
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 10_000,
+    }));
   });
 
   it('surfaces auth/network failures without throwing', async () => {
@@ -155,6 +164,13 @@ describe('test_smtp_connection', () => {
     expect(mail.to).toBe('me@gmail.com');
     expect(mail.from).toBe('Redi <me@gmail.com>');
     expect(mail.subject).toContain('Redi');
+    expect(vi.mocked(nodemailer.createTransport)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 10_000,
+      }),
+    );
   });
 
   it('reports send failures', async () => {
@@ -184,11 +200,11 @@ describe('send_test_notification', () => {
     expect(() => tool('send_test_notification').paramsSchema.parse({ channel: 'pigeon' })).toThrow();
   });
 
-  it('in_app inserts a sent notifications row via raw SQL', async () => {
+  it('in_app inserts a sent notifications row via the shared SQL helper', async () => {
     const res: any = await tool('send_test_notification').handler(ctx, { channel: 'in_app' });
     expect(res).toMatchObject({ ok: true, channel: 'in_app' });
-    expect(mocks.sql).toHaveBeenCalledTimes(1);
-    const sql = mocks.sql.mock.calls[0][0] as string;
+    expect(mocks.sqlExec).toHaveBeenCalledTimes(1);
+    const sql = mocks.sqlExec.mock.calls[0][0] as string;
     expect(sql).toContain('INSERT INTO notifications');
     expect(sql).toContain('["in_app"]');
     expect(sql).toContain("'sent'");

@@ -6,6 +6,8 @@ import { getConfig, requireDbCredentials } from '../config';
 import { getDb } from './client';
 
 type TransactionContext = { remoteSessionId?: string; embedded?: true };
+const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
+const REMOTE_STATUS_TIMEOUT_MS = 2_000;
 const globalState = globalThis as typeof globalThis & {
   __rediSqlTransactionContext?: AsyncLocalStorage<TransactionContext>;
   __rediEmbeddedTransactionTail?: Promise<void>;
@@ -30,7 +32,9 @@ export async function sqlRows<T = Record<string, unknown>>(sql: string): Promise
   const result: unknown = context?.remoteSessionId
     ? await remoteSessionSql(context.remoteSessionId, sql)
     : context?.embedded || db instanceof RemoteDatabase
-      ? await db.sql(sql)
+      ? await db.sql(sql, db instanceof RemoteDatabase
+        ? { timeoutMs: REMOTE_REQUEST_TIMEOUT_MS }
+        : undefined)
       : await withEmbeddedQueue(() => db.sql(sql));
   if (!result || (result instanceof Uint8Array && result.byteLength === 0)) return [];
   const table: Table = result instanceof Uint8Array ? tableFromIPC(result) : result as Table;
@@ -60,6 +64,9 @@ async function remoteRequest(path: string, init: RequestInit): Promise<Response>
   const response = await fetch(`${base}${path}`, {
     ...init,
     headers: remoteHeaders(init.headers),
+    signal: init.signal
+      ? AbortSignal.any([init.signal, AbortSignal.timeout(REMOTE_REQUEST_TIMEOUT_MS)])
+      : AbortSignal.timeout(REMOTE_REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 500);
@@ -119,7 +126,10 @@ async function resolveCommitOutcome(
     try {
       const response = await fetch(
         `${getConfig().MONGRELDB_URL.replace(/\/$/, '')}/queries/${error.queryId}`,
-        { headers: remoteHeaders({ 'x-session-id': sessionId }) },
+        {
+          headers: remoteHeaders({ 'x-session-id': sessionId }),
+          signal: AbortSignal.timeout(REMOTE_STATUS_TIMEOUT_MS),
+        },
       );
       if (response.ok) {
         const body = await response.json() as {

@@ -10,7 +10,7 @@ import {
 } from '../../lib/schemas/tasks';
 import { lit, sqlExec, sqlRows } from '../db/sql';
 import { getSettings, updateSettings } from '../settings';
-import { zonedDayBounds } from '../time';
+import { zonedDateBounds, zonedDayBounds } from '../time';
 import { NotFoundError } from './errors';
 import { defineTool, type Tool } from './registry';
 
@@ -83,6 +83,7 @@ async function listTasks(params: unknown) {
 
 async function createTask(params: unknown) {
   const parsed = createTaskParamsSchema.parse(params);
+  const timeZone = (await getSettings()).timezone;
   const now = new Date().toISOString();
   const id = randomUUID();
   const row: TaskRow = {
@@ -91,7 +92,7 @@ async function createTask(params: unknown) {
     description: parsed.description ?? null,
     category: parsed.category,
     status: 'pending',
-    due_at: parsed.due_at ? normalizeDueAt(parsed.due_at) : null,
+    due_at: parsed.due_at ? normalizeTaskDueAt(parsed.due_at, timeZone) : null,
     reminder_policy: parsed.reminder_policy ? JSON.stringify(parsed.reminder_policy) : null,
     source: parsed.source,
     source_email_id: parsed.source_email_id ?? null,
@@ -120,7 +121,8 @@ async function updateTask(params: unknown) {
   if (parsed.category !== undefined) sets.push(`category = ${lit(parsed.category)}`);
   if (parsed.status !== undefined) sets.push(`status = ${lit(parsed.status)}`);
   if (parsed.due_at !== undefined) {
-    sets.push(`due_at = ${lit(parsed.due_at ? normalizeDueAt(parsed.due_at) : null)}`);
+    const timeZone = (await getSettings()).timezone;
+    sets.push(`due_at = ${lit(parsed.due_at ? normalizeTaskDueAt(parsed.due_at, timeZone) : null)}`);
   }
   if (parsed.reminder_policy !== undefined) {
     sets.push(
@@ -129,6 +131,12 @@ async function updateTask(params: unknown) {
   }
   await sqlExec(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ${lit(parsed.id)}`);
   return toDto(await getTaskRow(parsed.id));
+}
+
+function normalizeTaskDueAt(value: string, timeZone: string): string {
+  if (value.length !== 10) return normalizeDueAt(value);
+  const { end } = zonedDateBounds(value, timeZone);
+  return new Date(end.getTime() - 1).toISOString();
 }
 
 async function setTerminalStatus(params: unknown, status: 'completed' | 'dismissed') {

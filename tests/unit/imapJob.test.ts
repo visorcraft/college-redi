@@ -195,6 +195,23 @@ describe('runImapPollJob', () => {
     }
   });
 
+  it('releases the lease when failure state persistence also fails', async () => {
+    runEmailPipeline.mockRejectedValueOnce(new Error('IMAP down'));
+    const update = vi.spyOn(settings, 'updateSettings')
+      .mockRejectedValueOnce(new Error('settings write failed'));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(await job.runImapPollJob(NOW)).toMatchObject({
+        ran: true,
+        error: 'IMAP down',
+      });
+      expect((await store.getJobLease(job.IMAP_POLL_JOB))?.last_status).toBe('error');
+    } finally {
+      update.mockRestore();
+      logged.mockRestore();
+    }
+  });
+
   it('starts failure backoff when the failed poll finishes', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);

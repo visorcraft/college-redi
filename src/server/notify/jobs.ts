@@ -15,8 +15,8 @@ const DAY_MS = 86_400_000;
 const ITEM_LEASE_MS = 60_000;
 const startOfUtcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 
-export function isoWeekKey(d: Date): string {
-  const date = startOfUtcDay(d);
+export function isoWeekKey(d: Date, timeZone = 'UTC'): string {
+  const date = startOfUtcDay(new Date(`${localDateKey(d, timeZone)}T00:00:00.000Z`));
   date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7) + 3);
   const first = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
   first.setUTCDate(first.getUTCDate() - ((first.getUTCDay() + 6) % 7) + 3);
@@ -145,6 +145,13 @@ export async function runDailyDigestJob(
     return { sent: false, reason: 'digest_disabled' };
   }
   const timeZone = settings.timezone ?? 'UTC';
+  const stamp = localDateKey(now, timeZone);
+  const digestId = `daily-digest:${stamp}`;
+  if ((await sqlRows<{ id: string }>(
+    `SELECT id FROM notifications WHERE id = ${lit(digestId)} LIMIT 1`,
+  ))[0]) {
+    return { sent: false, reason: 'already_sent' };
+  }
   const today = zonedDayBounds(now, timeZone);
   const todayStart = today.start;
   const tomorrowStart = today.end;
@@ -160,7 +167,6 @@ export async function runDailyDigestJob(
   if (collegeEmails.length === 0 && dueToday.length === 0 && upcoming.length === 0) {
     return { sent: false, reason: 'empty' };
   }
-  const stamp = localDateKey(now, timeZone);
   const lines: string[] = [`Your Redi digest for ${stamp}:`, ''];
   const collegeEmailSection = renderCollegeEmailDigestSection(collegeEmails);
   if (collegeEmailSection) lines.push(collegeEmailSection, '');
@@ -184,7 +190,9 @@ export async function runDailyDigestJob(
       importance: 'low',
       channels: ['in_app', 'email'],
       scheduledFor: now,
-    });
+      relatedType: 'digest',
+      relatedId: stamp,
+    }, digestId);
     await markCollegeEmailDigestItemsIncluded(
       collegeEmails.map(({ id }) => id),
     );
@@ -206,6 +214,7 @@ export async function runRegistrationSweepJob(
   now = new Date(),
   signal?: AbortSignal,
 ): Promise<{ enqueued: number }> {
+  const timeZone = (await loadEngineSettings()).timezone ?? 'UTC';
   let enqueued = 0;
   const enqueueTermOnce = async (n: {
     type: string; title: string; body: string; importance: 'normal' | 'urgent'; relatedId: string;
@@ -260,7 +269,7 @@ export async function runRegistrationSweepJob(
           title: `You still have ${unregistered} unregistered planned course(s) for ${term.name}`,
           body: `Registration for ${term.name} is open until ${term.registration_closes_at}. Finish registering your planned courses.`,
           importance: 'normal',
-          relatedId: `${term.id}:open_weekly:${isoWeekKey(now)}`,
+          relatedId: `${term.id}:open_weekly:${isoWeekKey(now, timeZone)}`,
         });
       }
     }

@@ -15,21 +15,29 @@ export async function POST(req: NextRequest) {
   const key = clientKey(req);
   const body = LoginBodySchema.safeParse(await req.json().catch(() => null));
   if (!body.success) return jsonError('invalid_body', 'Password is required.', 400);
+  const lock = key
+    ? await getLoginLockState(key)
+    : { locked: false, retryAfterSeconds: 0 };
+  if (lock.locked) {
+    return jsonError('login_locked', 'Too many failed attempts. Try again in a few minutes.', 429, {
+      'Retry-After': String(lock.retryAfterSeconds),
+    });
+  }
   const hash = await getSecret('login.password_hash');
   if (hash === null) return jsonError('setup_required', 'No password set yet. Create one first.', 403);
   const valid = await verifyPassword(hash, body.data.password);
   if (valid) {
     if (key) await recordLoginSuccess(key);
   } else {
-    const lock = key
+    if (key) await recordLoginFailure(key);
+    const updatedLock = key
       ? await getLoginLockState(key)
       : { locked: false, retryAfterSeconds: 0 };
-    if (lock.locked) {
+    if (updatedLock.locked) {
       return jsonError('login_locked', 'Too many failed attempts. Try again in a few minutes.', 429, {
-        'Retry-After': String(lock.retryAfterSeconds),
+        'Retry-After': String(updatedLock.retryAfterSeconds),
       });
     }
-    if (key) await recordLoginFailure(key);
     return jsonError('invalid_credentials', 'Wrong password.', 401);
   }
   const res = NextResponse.json({ ok: true });

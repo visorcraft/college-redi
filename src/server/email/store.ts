@@ -104,6 +104,8 @@ export async function insertProcessedEmail(
 }
 
 const EMAIL_PATCH_COLUMNS = [
+  'mailbox',
+  'uid',
   'classification',
   'summary',
   'extracted_count',

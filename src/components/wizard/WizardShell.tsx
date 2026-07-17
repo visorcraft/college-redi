@@ -83,7 +83,7 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
         {step.id === 'twilio' && <TwilioStep settings={settings} onComplete={onComplete} busy={busy} />}
         {step.id === 'degree' && <DegreeStep settings={settings} onComplete={onComplete} busy={busy} />}
         {step.id === 'checklist' && <ChecklistStep onSave={onSaveChecklist} busy={busy} />}
-        {step.id === 'notifications' && <NotificationsStep settings={settings} onComplete={onComplete} busy={busy} />}
+        {step.id === 'notifications' && <NotificationsStep settings={settings} onComplete={onComplete} busy={busy} preferBrowserTimezone />}
         {step.id === 'done' && <DoneStep settings={settings} secretFlags={secretFlags} onFinish={onFinish} busy={busy} />}
       </div>
       <div className="flex w-full items-center justify-between text-sm text-[#1F2D50]/70">

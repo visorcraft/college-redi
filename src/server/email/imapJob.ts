@@ -69,13 +69,23 @@ export async function runImapPollJob(
     const message = String(error instanceof Error ? error.message : error).slice(0, 500);
     const step = Math.min(imap.backoff_step ?? 0, BACKOFF_MINUTES.length - 1);
     const delayMinutes = BACKOFF_MINUTES[step];
-    await patchImap({
-      last_poll_at: failedAt.toISOString(),
-      last_error: message,
-      backoff_step: Math.min(step + 1, BACKOFF_MINUTES.length - 1),
-      next_poll_after: new Date(failedAt.getTime() + delayMinutes * 60_000).toISOString(),
-    });
-    await releaseJobLease(IMAP_POLL_JOB, 'error', failedAt, leaseOwner);
+    try {
+      await patchImap({
+        last_poll_at: failedAt.toISOString(),
+        last_error: message,
+        backoff_step: Math.min(step + 1, BACKOFF_MINUTES.length - 1),
+        next_poll_after: new Date(failedAt.getTime() + delayMinutes * 60_000).toISOString(),
+      });
+    } catch (patchError) {
+      console.error(JSON.stringify({
+        level: 'error',
+        job: IMAP_POLL_JOB,
+        msg: 'IMAP failure state update failed',
+        error: patchError instanceof Error ? patchError.message : String(patchError),
+      }));
+    } finally {
+      await releaseJobLease(IMAP_POLL_JOB, 'error', failedAt, leaseOwner);
+    }
     console.warn(JSON.stringify({
       level: 'warn',
       job: IMAP_POLL_JOB,

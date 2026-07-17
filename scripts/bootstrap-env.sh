@@ -11,6 +11,7 @@ ENV_FILE="$DATA_DIR/.env"
 mkdir -p "$DATA_DIR"
 
 if [ -f "$ENV_FILE" ]; then
+  chmod 600 "$ENV_FILE"
   echo "[redi-bootstrap] $ENV_FILE already exists; leaving it unchanged"
   exit 0
 fi

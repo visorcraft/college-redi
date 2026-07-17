@@ -22,6 +22,19 @@ describe('settings store', () => {
     expect(s.wizard_state).toMatchObject({ completed: false, skipped_steps: [], current_step: 1 });
   });
 
+  it('uses TZ as the first-run server fallback', async () => {
+    const previous = process.env.TZ;
+    env.cleanup();
+    env = makeTestEnv({ TZ: 'America/Denver' });
+    await resetServerState();
+    try {
+      expect((await getSettings()).timezone).toBe('America/Denver');
+    } finally {
+      if (previous === undefined) delete process.env.TZ;
+      else process.env.TZ = previous;
+    }
+  });
+
   it('deep-merges patches and preserves sibling keys across reads', async () => {
     const updated = await updateSettings({ ai: { model: 'custom-model' }, wizard_state: { completed: true } });
     expect(updated.ai.model).toBe('custom-model');

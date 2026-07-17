@@ -17,6 +17,8 @@ const BLOCKED_TOOLS = new Set([
   'list_mcp_tokens',
   'revoke_mcp_token',
   'send_test_notification',
+  'import_degree_audit',
+  'confirm_degree_import',
 ]);
 
 function isMcpTool(name: string): boolean {
@@ -90,7 +92,7 @@ const RESOURCES: McpResourceDef[] = [
 
 export function buildMcpServer(actor: string): Server {
   const server = new Server(
-    { name: 'redi', version: '1.0.0' },
+    { name: 'redi', version: '0.1.2' },
     { capabilities: { tools: {}, resources: {} } },
   );
 

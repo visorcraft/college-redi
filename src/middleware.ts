@@ -26,6 +26,15 @@ export default async function middleware(req: NextRequest) {
     ensureCsrfCookie(applySecurityHeaders(response, req, nonce), req);
 
   if (
+    pathname === '/api/auth/login'
+    && requestRateLimitExceeded(
+      req,
+      'login',
+      RATE_LIMITS.login.limit,
+      RATE_LIMITS.login.windowMs,
+    )
+  ) return secure(rateLimitResponse());
+  if (
     pathname === '/api/cron/tick'
     && requestRateLimitExceeded(
       req,

@@ -27,6 +27,7 @@ COPY --from=builder /app/.next/static ./.next/static
 # Native modules, copied explicitly in case the standalone tracer misses them.
 COPY --from=deps /app/node_modules/@visorcraft ./node_modules/@visorcraft
 COPY --from=deps /app/node_modules/argon2 ./node_modules/argon2
+COPY --from=deps /app/node_modules/pdfjs-dist/build/pdf.worker.mjs ./.next/server/chunks/pdf.worker.mjs
 COPY scripts/bootstrap-env.sh ./scripts/bootstrap-env.sh
 RUN chmod +x ./scripts/bootstrap-env.sh && mkdir -p /data
 

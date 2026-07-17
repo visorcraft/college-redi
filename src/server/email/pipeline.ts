@@ -291,7 +291,7 @@ export async function runEmailPipeline(deps: PipelineDeps = {}): Promise<Pipelin
     result.fetched += 1;
     const messageId = message.messageId
       || `no-message-id:${mailbox}:${batch.uidvalidity}:${message.uid}`;
-    const existing = await store.findProcessedByUid(mailbox, batch.uidvalidity, message.uid);
+    let existing = await store.findProcessedByUid(mailbox, batch.uidvalidity, message.uid);
     if (existing && existing.classification !== 'unprocessed') {
       result.skipped += 1;
       cursor = Math.max(cursor, message.uid);
@@ -303,6 +303,19 @@ export async function runEmailPipeline(deps: PipelineDeps = {}): Promise<Pipelin
         result.skipped += 1;
         cursor = Math.max(cursor, message.uid);
         continue;
+      }
+      if (duplicate) {
+        await store.updateProcessedEmail(duplicate.id, {
+          mailbox,
+          uid: message.uid,
+          uidvalidity: batch.uidvalidity,
+        });
+        existing = {
+          ...duplicate,
+          mailbox,
+          uid: message.uid,
+          uidvalidity: batch.uidvalidity,
+        };
       }
     }
 

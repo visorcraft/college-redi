@@ -99,44 +99,76 @@ export function applyQuietHours(at: Date, importance: Importance, settings: Engi
   return isInQuietHours(at, quiet, tz) ? quietHoursEnd(at, quiet, tz) : at;
 }
 
-export async function enqueueNotification(input: EnqueueNotificationInput): Promise<string> {
+export async function enqueueNotification(
+  input: EnqueueNotificationInput,
+  id: string = randomUUID(),
+): Promise<string> {
   const parsed = enqueueNotificationSchema.parse(input);
   const settings = await loadEngineSettings();
   const channels = resolveChannels(parsed.importance, settings, parsed.channels);
   const scheduledFor = applyQuietHours(parsed.scheduledFor, parsed.importance, settings);
-  const id = randomUUID();
-  await sqlExec(`INSERT INTO notifications (id, type, title, body, importance, channels, scheduled_for, status, related_type, related_id, created_at, sent_at) VALUES (${lit(id)}, ${lit(parsed.type)}, ${lit(parsed.title)}, ${lit(parsed.body)}, ${lit(parsed.importance)}, ${lit(JSON.stringify(channels))}, ${lit(scheduledFor)}, 'pending', ${lit(parsed.relatedType ?? null)}, ${lit(parsed.relatedId ?? null)}, ${lit(new Date())}, NULL)`);
+  try {
+    await sqlExec(`INSERT INTO notifications (id, type, title, body, importance, channels, scheduled_for, status, related_type, related_id, created_at, sent_at) VALUES (${lit(id)}, ${lit(parsed.type)}, ${lit(parsed.title)}, ${lit(parsed.body)}, ${lit(parsed.importance)}, ${lit(JSON.stringify(channels))}, ${lit(scheduledFor)}, 'pending', ${lit(parsed.relatedType ?? null)}, ${lit(parsed.relatedId ?? null)}, ${lit(new Date())}, NULL)`);
+  } catch (error) {
+    const existing = await sqlRows<{ id: string }>(
+      `SELECT id FROM notifications WHERE id = ${lit(id)} LIMIT 1`,
+    );
+    if (!existing[0]) throw error;
+  }
   return id;
 }
 
 interface NotificationRow { id: string; title: string; body: string; importance: Importance; channels: string }
-interface HistoryRow { status: 'sent' | 'failed'; attempt: number; sent_at: string }
+interface HistoryRow {
+  id: string;
+  status: 'sent' | 'failed';
+  provider_response: string | null;
+  attempt: number;
+  sent_at: string;
+}
 
 export interface DispatchSummary { due: number; sent: number; failed: number; awaiting_retry: number; held: number }
 
 export const RETRY_BACKOFF_MS = [60_000, 15 * 60_000, 3_600_000] as const;
 const MAX_FAILED_ATTEMPTS = 1 + RETRY_BACKOFF_MS.length;
 const CHANNEL_CLAIM_MS = 10 * 60_000;
+const DELIVERY_RESERVED = '{"delivery":"reserved"}';
+const DELIVERY_IN_FLIGHT = '{"delivery":"in_flight"}';
+const DELIVERY_UNKNOWN = '{"delivery":"unknown"}';
 
-type ChannelState = 'sent' | 'exhausted' | 'awaiting_retry' | 'ready';
+type ChannelState = 'sent' | 'exhausted' | 'unknown' | 'awaiting_retry' | 'ready';
 
 async function channelState(
   notificationId: string,
   channel: string,
   now: Date,
-): Promise<{ state: ChannelState; attempts: number }> {
+): Promise<{ state: ChannelState; attempts: number; reservationId?: string }> {
   const rows = await sqlRows<HistoryRow>(
-    `SELECT status, attempt, sent_at FROM notification_history WHERE notification_id = ${lit(notificationId)} AND channel = ${lit(channel)} ORDER BY attempt ASC`,
+    `SELECT id, status, provider_response, attempt, sent_at FROM notification_history WHERE notification_id = ${lit(notificationId)} AND channel = ${lit(channel)} ORDER BY attempt ASC, sent_at ASC, id ASC`,
   );
-  if (rows.some((r) => r.status === 'sent')) return { state: 'sent', attempts: rows.length };
-  const failed = rows.filter((r) => r.status === 'failed');
-  if (failed.length >= MAX_FAILED_ATTEMPTS) return { state: 'exhausted', attempts: rows.length };
+  const attempts = rows.filter((r) => r.provider_response !== DELIVERY_RESERVED).length;
+  if (rows.some((r) => r.status === 'sent')) return { state: 'sent', attempts };
+  const latest = rows.at(-1);
+  if (latest?.provider_response === DELIVERY_RESERVED) {
+    return { state: 'ready', attempts, reservationId: latest.id };
+  }
+  if (latest?.provider_response === DELIVERY_UNKNOWN) {
+    return { state: 'unknown', attempts };
+  }
+  if (latest?.provider_response === DELIVERY_IN_FLIGHT) {
+    return now.getTime() - new Date(latest.sent_at).getTime() >= CHANNEL_CLAIM_MS
+      ? { state: 'unknown', attempts }
+      : { state: 'awaiting_retry', attempts };
+  }
+  const failed = rows.filter((r) =>
+    r.status === 'failed' && r.provider_response !== DELIVERY_RESERVED);
+  if (failed.length >= MAX_FAILED_ATTEMPTS) return { state: 'exhausted', attempts };
   if (failed.length === 0) return { state: 'ready', attempts: 0 };
   const lastFailedAt = new Date(failed[failed.length - 1]!.sent_at).getTime();
   const wait = RETRY_BACKOFF_MS[Math.min(failed.length - 1, RETRY_BACKOFF_MS.length - 1)];
   return now.getTime() - lastFailedAt >= wait
-    ? { state: 'ready', attempts: rows.length }
-    : { state: 'awaiting_retry', attempts: rows.length };
+    ? { state: 'ready', attempts }
+    : { state: 'awaiting_retry', attempts };
 }
 
 const destinationFor = (channel: NotificationChannel, s: EngineSettings) =>
@@ -207,16 +239,28 @@ export async function dispatchDueNotifications(
         if (claimed.state === 'ready') {
           signal?.throwIfAborted();
           if (channelLeaseLost) throw new Error(`notification channel lease lost: ${claimName}`);
-          let status: 'sent' | 'failed';
+          const historyId = claimed.reservationId ?? randomUUID();
+          const attempt = claimed.attempts + 1;
+          if (!claimed.reservationId) {
+            await sqlExec(`INSERT INTO notification_history (id, notification_id, channel, destination, status, provider_response, attempt, sent_at) VALUES (${lit(historyId)}, ${lit(n.id)}, ${lit(channel)}, ${lit(destinationFor(channel, settings))}, 'failed', ${lit(DELIVERY_RESERVED)}, ${attempt}, ${lit(new Date())})`);
+          }
+          await sqlExec(
+            `UPDATE notification_history SET provider_response = ${lit(DELIVERY_IN_FLIGHT)}, ` +
+            `attempt = ${attempt}, sent_at = ${lit(new Date())} ` +
+            `WHERE id = ${lit(historyId)}`,
+          );
+          let status: 'sent' | 'failed' = 'sent';
           let provider: Record<string, unknown>;
           try {
             provider = await deliver(channel, n, settings);
-            status = 'sent';
           } catch (err) {
             provider = { error: err instanceof Error ? err.message : String(err) };
             status = 'failed';
           }
-          await sqlExec(`INSERT INTO notification_history (id, notification_id, channel, destination, status, provider_response, attempt, sent_at) VALUES (${lit(randomUUID())}, ${lit(n.id)}, ${lit(channel)}, ${lit(destinationFor(channel, settings))}, ${lit(status)}, ${lit(JSON.stringify(provider))}, ${claimed.attempts + 1}, ${lit(new Date())})`);
+          await sqlExec(
+            `UPDATE notification_history SET status = ${lit(status)}, ` +
+            `provider_response = ${lit(JSON.stringify(provider))} WHERE id = ${lit(historyId)}`,
+          );
         }
       } finally {
         stopHeartbeat();
@@ -226,10 +270,20 @@ export async function dispatchDueNotifications(
       signal?.throwIfAborted();
     }
     const states = await Promise.all(channels.map((c) => channelState(n.id, c, now)));
+    for (let index = 0; index < channels.length; index += 1) {
+      if (states[index]?.state === 'unknown') {
+        await sqlExec(
+          `UPDATE notification_history SET provider_response = ${lit(DELIVERY_UNKNOWN)} ` +
+          `WHERE notification_id = ${lit(n.id)} AND channel = ${lit(channels[index]!)} ` +
+          `AND provider_response = ${lit(DELIVERY_IN_FLIGHT)}`,
+        );
+      }
+    }
     if (states.every((s) => s.state === 'sent')) {
       await sqlExec(`UPDATE notifications SET status = 'sent', sent_at = ${lit(now)} WHERE id = ${lit(n.id)}`);
       summary.sent += 1;
-    } else if (states.every((s) => s.state === 'sent' || s.state === 'exhausted')) {
+    } else if (states.every((s) =>
+      s.state === 'sent' || s.state === 'exhausted' || s.state === 'unknown')) {
       await sqlExec(`UPDATE notifications SET status = 'failed' WHERE id = ${lit(n.id)}`);
       summary.failed += 1;
     } else {

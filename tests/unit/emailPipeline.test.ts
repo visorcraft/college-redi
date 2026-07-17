@@ -289,6 +289,39 @@ describe('runEmailPipeline', () => {
       .filter((email) => email.message_id === '<reg-2026-041@stateu.edu>')).toHaveLength(1);
   });
 
+  it('reuses an unprocessed Message-ID at its new UID', async () => {
+    const messageId = '<retry-after-uidvalidity@stateu.edu>';
+    const id = await store.insertProcessedEmail({
+      mailbox: 'INBOX',
+      uid: 50,
+      uidvalidity: 7,
+      message_id: messageId,
+      from_addr: 'registrar@stateu.edu',
+      subject: 'Registration deadline',
+      received_at: '2026-07-17T11:00:00.000Z',
+      classification: 'unprocessed',
+      summary: null,
+      extracted_count: 0,
+      notified: false,
+      processed_at: null,
+    });
+    const eml = loadEml('actionable.eml')
+      .replace('<reg-2026-041@stateu.edu>', messageId);
+    const result = await pipeline.runEmailPipeline({
+      source: fakeSource([{ uid: 3, eml }], 100),
+      triage: async () => actionable(),
+      now: () => new Date('2026-07-17T12:37:00Z'),
+    });
+    expect(result.actionable).toBe(1);
+    expect(await store.getProcessedEmail(id)).toMatchObject({
+      uid: 3,
+      uidvalidity: 100,
+      classification: 'actionable',
+    });
+    expect((await store.listProcessedEmails({ limit: 50, offset: 0 })).emails
+      .filter((email) => email.message_id === messageId)).toHaveLength(1);
+  });
+
   it('records informational email for digest without notification', async () => {
     engineMock.enqueueNotification.mockClear();
     await settings.updateSettings({ imap: { last_uid: 2, uidvalidity: 99 } });

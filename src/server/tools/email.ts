@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dueAtInputSchema } from '../../lib/schemas/tasks';
 import { triageMessages } from '../ai/triage';
 import { createImapSource, ImapUidvalidityChangedError } from '../email/imapClient';
 import { runImapPollJob } from '../email/imapJob';
@@ -42,7 +43,7 @@ export const acceptEventParams = z.object({
   id: z.string().min(1),
   create_task: z.boolean().default(true),
   title: z.string().min(1).max(300).optional(),
-  due_at: z.string().nullable().optional(),
+  due_at: dueAtInputSchema.nullable().optional(),
   category: z.enum([
     'transcript',
     'vaccine',

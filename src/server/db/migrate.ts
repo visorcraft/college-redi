@@ -1,4 +1,4 @@
-import { KitDatabase, type TableSpec } from '@visorcraft/mongreldb-kit';
+import { KitDatabase, RemoteDatabase, type TableSpec } from '@visorcraft/mongreldb-kit';
 import { tableFromIPC } from 'apache-arrow';
 import { getConfig, requireDbCredentials } from '../config';
 import { getDb, type AppDb } from './client';
@@ -70,11 +70,15 @@ export async function runMigrations(db?: AppDb): Promise<void> {
     return;
   }
 
-  await handle.sql(
+  const sql = (statement: string) => handle.sql(
+    statement,
+    handle instanceof RemoteDatabase ? { timeoutMs: 30_000 } : undefined,
+  );
+  await sql(
     `CREATE TABLE IF NOT EXISTS "${MIGRATIONS_TABLE}" (` +
       '"version" bigint PRIMARY KEY, "name" text NOT NULL, "applied_at" text NOT NULL)',
   );
-  const result: unknown = await handle.sql(`SELECT "version" FROM "${MIGRATIONS_TABLE}"`);
+  const result: unknown = await sql(`SELECT "version" FROM "${MIGRATIONS_TABLE}"`);
   const rows = result instanceof Uint8Array ? tableFromIPC(result) : result as Iterable<unknown>;
   const applied = new Set<number>();
   for (const row of rows) {
@@ -104,12 +108,12 @@ export async function runMigrations(db?: AppDb): Promise<void> {
     } else if (migration.version === 2) {
       const descriptor = await remoteSchema('notifications');
       if (!descriptor.columns.some((column) => column.name === 'read_at')) {
-        await handle.sql('ALTER TABLE "notifications" ADD COLUMN "read_at" text NULL');
+        await sql('ALTER TABLE "notifications" ADD COLUMN "read_at" text NULL');
       }
     } else {
       throw new Error(`remote migration ${migration.version} (${migration.name}) is not implemented`);
     }
-    await handle.sql(
+    await sql(
       `INSERT INTO "${MIGRATIONS_TABLE}" ("version", "name", "applied_at") VALUES (` +
         `${migration.version}, ${sqlString(migration.name)}, ${sqlString(new Date().toISOString())})`,
     );
@@ -229,7 +233,13 @@ async function remoteRequest(path: string, init?: RequestInit): Promise<Response
     'authorization',
     `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`, 'utf8').toString('base64')}`,
   );
-  return fetch(`${config.MONGRELDB_URL.replace(/\/$/, '')}${path}`, { ...init, headers });
+  return fetch(`${config.MONGRELDB_URL.replace(/\/$/, '')}${path}`, {
+    ...init,
+    headers,
+    signal: init?.signal
+      ? AbortSignal.any([init.signal, AbortSignal.timeout(30_000)])
+      : AbortSignal.timeout(30_000),
+  });
 }
 
 function assertRemoteSchema(table: TableSpec, actual: RemoteSchemaDescriptor): void {

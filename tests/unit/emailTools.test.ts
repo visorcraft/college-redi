@@ -354,6 +354,25 @@ describe('processed email tools', () => {
 });
 
 describe('event review tools', () => {
+  it('rejects invalid accept_event due_at values', async () => {
+    await expect(invoke('accept_event', {
+      id: 'event-id',
+      due_at: 'not-a-date',
+    })).rejects.toThrow(/due_at/i);
+    await expect(invoke('accept_event', {
+      id: 'event-id',
+      due_at: '09/01/2026',
+    })).rejects.toThrow(/due_at/i);
+    await expect(invoke('accept_event', {
+      id: 'event-id',
+      due_at: '2026-02-31',
+    })).rejects.toThrow(/due_at/i);
+    await expect(invoke('accept_event', {
+      id: 'event-id',
+      due_at: '2026-09-01T12:00',
+    })).rejects.toThrow(/due_at/i);
+  });
+
   it('filters events and joins source email fields', async () => {
     const pending = await invoke<{
       events: Array<{ email_subject: string; email_from: string }>;

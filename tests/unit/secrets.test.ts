@@ -1,9 +1,9 @@
-import { readFileSync, statSync } from 'node:fs';
+import { chmodSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { eq } from '@visorcraft/mongreldb-kit';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeTestEnv, resetServerState, type TestEnv } from '../helpers/env';
-import { getMasterKey } from '@/server/keys';
+import { _resetKeysForTests, getMasterKey } from '@/server/keys';
 import { getSecret, setSecret } from '@/server/secrets';
 import { getKitDb } from '@/server/db/client';
 import { secrets } from '../../db/schema';
@@ -22,6 +22,10 @@ describe('master key', () => {
     const keyPath = path.join(env.dataDir, 'master.key');
     expect(statSync(keyPath).mode & 0o777).toBe(0o600);
     expect(readFileSync(keyPath).equals(key)).toBe(true);
+    chmodSync(keyPath, 0o644);
+    _resetKeysForTests();
+    expect((await getMasterKey()).equals(key)).toBe(true);
+    expect(statSync(keyPath).mode & 0o777).toBe(0o600);
   });
 
   it('prefers REDI_MASTER_KEY (hex) over the keyfile', async () => {

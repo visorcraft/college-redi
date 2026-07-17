@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getAiClient } from './client';
+import { localDateKey } from '../time';
 
 export interface TriageInput {
   from: string;
@@ -51,7 +52,7 @@ export function buildTriagePrompt(
 ): { system: string; user: string } {
   const system = [
     'You are Redi\'s email triage engine for a college student. Classify each email and extract what matters.',
-    `The student's timezone is ${timezone}. Today is ${now.toISOString().slice(0, 10)}; interpret all dates and deadlines in that timezone relative to that date.`,
+    `The student's timezone is ${timezone}. Today is ${localDateKey(now, timezone)}; interpret all dates and deadlines in that timezone relative to that date.`,
     'Classification rules:',
     '- junk: marketing, newsletters, spam, generic campus blasts with no personal action.',
     '- actionable: personally addressed; contains a deadline, request, or registration/financial-aid/housing action; or from a registrar/professor/advisor about this student.',

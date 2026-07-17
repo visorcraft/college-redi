@@ -1,24 +1,35 @@
+import { NextRequest } from 'next/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   callTool: vi.fn(), ensureBootstrapped: vi.fn(), getSecret: vi.fn(), setSecret: vi.fn(),
   argonVerify: vi.fn(), argonHash: vi.fn(),
+  createSessionToken: vi.fn(), newCsrfToken: vi.fn(),
 }));
 vi.mock('@/server/bootstrap', () => ({ ensureBootstrapped: mocks.ensureBootstrapped }));
 vi.mock('@/server/tools/call', () => ({ callTool: mocks.callTool }));
 vi.mock('@/server/secrets', () => ({ getSecret: mocks.getSecret, setSecret: mocks.setSecret }));
 vi.mock('argon2', () => ({ default: { verify: mocks.argonVerify, hash: mocks.argonHash } }));
+vi.mock('@/server/auth', () => ({
+  createSessionToken: mocks.createSessionToken,
+  newCsrfToken: mocks.newCsrfToken,
+  SESSION_COOKIE: 'redi_session',
+  CSRF_COOKIE: 'redi_csrf',
+  SESSION_TTL_SECONDS: 1209600,
+}));
 
 import { GET, PATCH } from '@/app/api/settings/route';
 import { PUT } from '@/app/api/settings/secret/route';
 import { POST as changePassword } from '@/app/api/auth/change-password/route';
 
 const jsonReq = (body: unknown) =>
-  new Request('http://localhost/api/x', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  new NextRequest('http://localhost/api/x', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.callTool.mockResolvedValue({ timezone: 'UTC' });
+  mocks.createSessionToken.mockResolvedValue('fresh-session');
+  mocks.newCsrfToken.mockReturnValue('fresh-csrf');
 });
 
 describe('GET/PATCH /api/settings', () => {
@@ -76,7 +87,9 @@ describe('POST /api/auth/change-password', () => {
     const res = await changePassword(jsonReq({ current_password: 'old-password', new_password: 'new-password-123' }));
     expect(mocks.argonHash).toHaveBeenCalledWith('new-password-123');
     expect(mocks.setSecret).toHaveBeenCalledWith('login.password_hash', 'new-hash');
-    expect(await res.json()).toEqual({ ok: true });
+    expect(await res.json()).toEqual({ ok: true, other_sessions_signed_out: true });
+    expect(res.cookies.get('redi_session')?.value).toBe('fresh-session');
+    expect(res.cookies.get('redi_csrf')?.value).toBe('fresh-csrf');
   });
 
   it('rejects short new passwords with 400', async () => {

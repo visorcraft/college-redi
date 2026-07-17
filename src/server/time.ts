@@ -43,6 +43,14 @@ export function zonedDayBounds(
   spanDays = 1,
 ): { date: string; start: Date; end: Date } {
   const date = localDateKey(at, timeZone);
+  return zonedDateBounds(date, timeZone, spanDays);
+}
+
+export function zonedDateBounds(
+  date: string,
+  timeZone: string,
+  spanDays = 1,
+): { date: string; start: Date; end: Date } {
   return {
     date,
     start: startOfLocalDate(date, timeZone),

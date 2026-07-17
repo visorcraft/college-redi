@@ -16,6 +16,7 @@ vi.mock('twilio', () => ({
 let engine: typeof import('../../src/server/notify/engine');
 let updateSettings: (p: Record<string, unknown>) => Promise<unknown>;
 let sqlRows: <T = Record<string, unknown>>(sql: string) => Promise<T[]>;
+let dbSql: typeof import('../../src/server/db/sql');
 
 const T0 = new Date('2026-03-10T12:00:00.000Z');
 
@@ -23,7 +24,8 @@ beforeAll(async () => {
   await setupTestDb();
   engine = await import('../../src/server/notify/engine');
   ({ updateSettings } = await import('../../src/server/settings'));
-  ({ sqlRows } = await import('../../src/server/db/sql'));
+  dbSql = await import('../../src/server/db/sql');
+  ({ sqlRows } = dbSql);
 });
 beforeEach(async () => {
   await cleanTables();
@@ -167,6 +169,72 @@ describe('dispatchDueNotifications (spec §6.5.2)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('does not redeliver after provider success when final history update fails', async () => {
+    const id = await engine.enqueueNotification({
+      type: 'system',
+      title: 'Hi',
+      body: 'b',
+      importance: 'urgent',
+      channels: ['email'],
+      scheduledFor: T0,
+    });
+    const original = dbSql.sqlExec;
+    const exec = vi.spyOn(dbSql, 'sqlExec').mockImplementation(async (sql) => {
+      if (sql.startsWith('UPDATE notification_history SET status')) {
+        throw new Error('history update failed');
+      }
+      return original(sql);
+    });
+    await expect(engine.dispatchDueNotifications(T0)).rejects.toThrow('history update failed');
+    exec.mockRestore();
+
+    const reservedAt = (await sqlRows<{ sent_at: string }>(
+      `SELECT sent_at FROM notification_history WHERE notification_id = '${id}'`,
+    ))[0]!.sent_at;
+    expect((await engine.dispatchDueNotifications(
+      new Date(new Date(reservedAt).getTime() + 11 * 60_000),
+    )).failed).toBe(1);
+    expect(mocks.sendMail).toHaveBeenCalledOnce();
+    expect(await historyFor(id)).toEqual([{
+      channel: 'email',
+      status: 'failed',
+      attempt: 1,
+    }]);
+    expect((await sqlRows<{ provider_response: string }>(
+      `SELECT provider_response FROM notification_history WHERE notification_id = '${id}'`,
+    ))[0]?.provider_response).toBe('{"delivery":"unknown"}');
+  });
+
+  it('reuses a definitely-unsent reservation without consuming an attempt', async () => {
+    const id = await engine.enqueueNotification({
+      type: 'system',
+      title: 'Hi',
+      body: 'b',
+      importance: 'normal',
+      channels: ['email'],
+      scheduledFor: T0,
+    });
+    const original = dbSql.sqlExec;
+    const exec = vi.spyOn(dbSql, 'sqlExec').mockImplementation(async (sql) => {
+      if (sql.includes('{"delivery":"in_flight"}')) {
+        throw new Error('failed before provider call');
+      }
+      return original(sql);
+    });
+    await expect(engine.dispatchDueNotifications(T0))
+      .rejects.toThrow('failed before provider call');
+    exec.mockRestore();
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+
+    expect((await engine.dispatchDueNotifications(T0)).sent).toBe(1);
+    expect(mocks.sendMail).toHaveBeenCalledOnce();
+    expect(await historyFor(id)).toEqual([{
+      channel: 'email',
+      status: 'sent',
+      attempt: 1,
+    }]);
   });
 
   it('ends quiet hours at the first valid instant after a DST gap', () => {

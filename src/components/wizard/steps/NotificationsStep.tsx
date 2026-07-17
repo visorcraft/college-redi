@@ -1,11 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TextField, PrimaryButton } from '@/components/ui/forms';
 import type { SettingsSnapshot } from '@/lib/schemas/settings';
 
-export function NotificationsStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue' }: {
-  settings: SettingsSnapshot; onComplete?: (patch?: Record<string, unknown>) => Promise<void>; busy?: boolean; submitLabel?: string;
+export function initialNotificationTimezone(
+  stored: string | undefined,
+  preferBrowser: boolean,
+  browser = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): string {
+  return preferBrowser ? browser || stored || 'UTC' : stored || browser || 'UTC';
+}
+
+export function NotificationsStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue', preferBrowserTimezone = false }: {
+  settings: SettingsSnapshot; onComplete?: (patch?: Record<string, unknown>) => Promise<void>; busy?: boolean; submitLabel?: string; preferBrowserTimezone?: boolean;
 }) {
   const prefs = settings.notification_prefs;
   const [mode, setMode] = useState<'urgent_digest' | 'immediate_all'>(
@@ -15,8 +23,13 @@ export function NotificationsStep({ settings, onComplete = async () => {}, busy 
   const [quietStart, setQuietStart] = useState(settings.quiet_hours?.start ?? '22:00');
   const [quietEnd, setQuietEnd] = useState(settings.quiet_hours?.end ?? '08:00');
   const [timezone, setTimezone] = useState(
-    settings.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
+    initialNotificationTimezone(settings.timezone, false),
   );
+  useEffect(() => {
+    if (preferBrowserTimezone) {
+      setTimezone(initialNotificationTimezone(settings.timezone, true));
+    }
+  }, [preferBrowserTimezone, settings.timezone]);
 
   function save() {
     return onComplete({

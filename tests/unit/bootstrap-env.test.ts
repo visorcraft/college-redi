@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -41,9 +41,11 @@ describe('scripts/bootstrap-env.sh (spec §4.6)', () => {
     try {
       const sentinel = 'MONGRELDB_DB_USERNAME=custom\nMONGRELDB_DB_PASSWORD=keepme\n';
       writeFileSync(path.join(dir, '.env'), sentinel, { mode: 0o600 });
+      chmodSync(path.join(dir, '.env'), 0o644);
       const result = run(dir);
       expect(result.status).toBe(0);
       expect(readFileSync(path.join(dir, '.env'), 'utf8')).toBe(sentinel);
+      expect(statSync(path.join(dir, '.env')).mode & 0o777).toBe(0o600);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
