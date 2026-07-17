@@ -1,9 +1,9 @@
 'use client';
 
+import { ImportFlow } from '@/components/degree/ImportFlow';
 import type { SettingsSnapshot } from '@/lib/schemas/settings';
 
-// PHASE 3 HANDOFF: replace this stub with the AI-assisted degree-audit import UI.
-export function DegreeImportSlot(_props: { settings: SettingsSnapshot }) {
-  void _props;
-  return null;
+export function DegreeImportSlot({ settings }: { settings: SettingsSnapshot }) {
+  void settings;
+  return <ImportFlow compact />;
 }

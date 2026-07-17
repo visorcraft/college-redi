@@ -1,0 +1,18 @@
+State University — Degree Audit
+Program: Bachelor of Science in Computer Science
+Catalog Year: 2024-2025
+Total credits required: 120
+Minimum cumulative GPA: 2.0
+
+Core Requirements (all required):
+  CS 101   Introduction to Computer Science   4 credits   (prerequisite: none)
+  CS 201   Data Structures                    4 credits   (prerequisite: CS 101)
+  MATH 151 Calculus I                         4 credits
+
+Humanities Electives: 6 credits from HUM or PHIL courses numbered 100-499.
+
+Completed:
+  Fall 2024   CS 101    A    4 credits
+  Fall 2024   MATH 151  B+   4 credits
+In Progress:
+  Fall 2025   CS 201         4 credits
