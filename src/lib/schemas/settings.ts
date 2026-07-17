@@ -54,6 +54,8 @@ export const ImapSettingsSchema = z.object({
   username: z.string().min(1),
   mailbox: z.string().min(1),
   enabled: z.boolean(),
+  backoff_step: z.number().int().min(0).default(0),
+  next_poll_after: z.string().nullable().default(null),
 }).passthrough();
 
 export const SmtpSecuritySchema = z.enum(['tls', 'starttls', 'none']);
@@ -129,6 +131,8 @@ const StoredImapSettingsSchema = z.object({
   uidvalidity: z.number().int().nullable().default(null),
   last_poll_at: z.string().nullable().default(null),
   last_error: z.string().nullable().default(null),
+  backoff_step: z.number().int().min(0).default(0),
+  next_poll_after: z.string().nullable().default(null),
 }).passthrough();
 
 const StoredSmtpSettingsSchema = z.object({
@@ -175,6 +179,7 @@ export const AppSettingsSchema = z.object({
     host: '', port: 993, tls: true, username: '', mailbox: 'INBOX',
     poll_interval_minutes: 5, enabled: false, auto_accept_events: false,
     last_uid: 0, uidvalidity: null, last_poll_at: null, last_error: null,
+    backoff_step: 0, next_poll_after: null,
   }),
   smtp: StoredSmtpSettingsSchema.default({
     host: '', port: 465, security: 'tls', username: '', from_address: '', personal_email: '', enabled: false,
@@ -211,7 +216,11 @@ export interface SettingsSnapshot {
   quiet_hours?: z.infer<typeof QuietHoursSchema>;
   notification_prefs?: z.infer<typeof NotificationPrefsSchema>;
   ai?: { base_url?: string; model?: string; effort?: z.infer<typeof EffortSchema>; daily_cap?: number };
-  imap?: { host?: string; port?: number; tls?: boolean; username?: string; mailbox?: string; poll_interval_minutes?: number; enabled?: boolean; last_error?: string | null };
+  imap?: {
+    host?: string; port?: number; tls?: boolean; username?: string; mailbox?: string;
+    poll_interval_minutes?: number; enabled?: boolean; last_error?: string | null;
+    backoff_step?: number; next_poll_after?: string | null;
+  };
   smtp?: { host?: string; port?: number; security?: z.infer<typeof SmtpSecuritySchema>; username?: string; from_address?: string; personal_email?: string; enabled?: boolean };
   twilio?: { account_sid?: string; from_number?: string; to_number?: string; enabled?: boolean };
   wizard_state?: WizardState;

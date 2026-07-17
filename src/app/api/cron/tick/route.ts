@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyPassword } from '../../../../server/password';
 import { getSecret } from '../../../../server/secrets';
 import { runNotificationDispatchJob } from '../../../../server/notify/jobs';
+import { runImapPollJob } from '../../../../server/email/imapJob';
 
 export async function POST(req: NextRequest) {
   const secret = req.headers.get('x-redi-cron-secret');
@@ -14,5 +15,11 @@ export async function POST(req: NextRequest) {
     );
   }
   const summary = await runNotificationDispatchJob();
-  return NextResponse.json({ ok: true, ran: ['notification_dispatch'], ...summary });
+  const imapPoll = await runImapPollJob(new Date());
+  return NextResponse.json({
+    ok: true,
+    ran: ['notification_dispatch'],
+    ...summary,
+    imapPoll,
+  });
 }

@@ -3,6 +3,7 @@ import { getSecret } from '@/server/secrets';
 import { getSettings } from '@/server/settings';
 import SetupBanners from '@/components/dashboard/SetupBanners';
 import { TodayCard } from '@/components/ui/TodayCard';
+import CollegeInboxCard from '@/components/email/CollegeInboxCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,7 @@ export default async function DashboardPage() {
         </form>
       </header>
       <TodayCard />
+      <CollegeInboxCard />
       <section className="rounded-2xl bg-white p-6 shadow-sm">
         <p className="text-[#1F2D50]/80">
           Redi is settling in. The dashboard comes alive as degree plans, tasks, and notifications arrive in the next

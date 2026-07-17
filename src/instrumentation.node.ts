@@ -1,5 +1,7 @@
 import { ensureBootstrapped } from './server/bootstrap';
+import { startImapPollSchedule } from './server/email/imapJob';
 
-export function register(): Promise<void> {
-  return ensureBootstrapped();
+export async function register(): Promise<void> {
+  await ensureBootstrapped();
+  startImapPollSchedule();
 }

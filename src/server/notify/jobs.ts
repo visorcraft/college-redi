@@ -4,6 +4,10 @@ import {
   dispatchDueNotifications, enqueueNotification, loadEngineSettings,
   type DispatchSummary, type EngineSettings,
 } from './engine';
+import {
+  collectCollegeEmailDigestItems,
+  renderCollegeEmailDigestSection,
+} from '../email/digest';
 
 const DAY_MS = 86_400_000;
 const startOfUtcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -99,12 +103,9 @@ export async function runDailyDigestJob(now = new Date()): Promise<{ sent: boole
     return { sent: false, reason: 'digest_disabled' };
   }
   const todayStart = startOfUtcDay(now);
-  const yesterdayStart = new Date(todayStart.getTime() - DAY_MS);
   const tomorrowStart = new Date(todayStart.getTime() + DAY_MS);
   const weekEnd = new Date(todayStart.getTime() + 7 * DAY_MS);
-  const infoEmails = await sqlRows<{ from_addr: string; subject: string; summary: string | null }>(
-    `SELECT from_addr, subject, summary FROM emails_processed WHERE classification = 'informational' AND received_at >= ${lit(yesterdayStart)} AND received_at < ${lit(todayStart)} ORDER BY received_at DESC LIMIT 20`,
-  );
+  const collegeEmails = await collectCollegeEmailDigestItems();
   const open = `status IN ('pending', 'awaiting_confirmation') AND due_at IS NOT NULL`;
   const dueToday = await sqlRows<TaskRow>(
     `SELECT * FROM tasks WHERE ${open} AND due_at >= ${lit(todayStart)} AND due_at < ${lit(tomorrowStart)} ORDER BY due_at ASC`,
@@ -112,16 +113,13 @@ export async function runDailyDigestJob(now = new Date()): Promise<{ sent: boole
   const upcoming = await sqlRows<TaskRow>(
     `SELECT * FROM tasks WHERE ${open} AND due_at >= ${lit(tomorrowStart)} AND due_at < ${lit(weekEnd)} ORDER BY due_at ASC`,
   );
-  if (infoEmails.length === 0 && dueToday.length === 0 && upcoming.length === 0) {
+  if (collegeEmails.length === 0 && dueToday.length === 0 && upcoming.length === 0) {
     return { sent: false, reason: 'empty' };
   }
   const stamp = todayStart.toISOString().slice(0, 10);
   const lines: string[] = [`Your Redi digest for ${stamp}:`, ''];
-  if (infoEmails.length > 0) {
-    lines.push('From your college inbox yesterday:');
-    for (const m of infoEmails) lines.push(`• ${m.summary ?? m.subject} (${m.from_addr})`);
-    lines.push('');
-  }
+  const collegeEmailSection = renderCollegeEmailDigestSection(collegeEmails);
+  if (collegeEmailSection) lines.push(collegeEmailSection, '');
   if (dueToday.length > 0) {
     lines.push('Due today:');
     for (const t of dueToday) lines.push(`• ${t.title}`);
@@ -139,6 +137,9 @@ export async function runDailyDigestJob(now = new Date()): Promise<{ sent: boole
     channels: ['in_app', 'email'],
     scheduledFor: now,
   });
+  if (collegeEmails.length > 0) {
+    await collectCollegeEmailDigestItems({ markIncluded: true });
+  }
   return { sent: true };
 }
 
