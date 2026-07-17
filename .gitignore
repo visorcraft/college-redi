@@ -1,0 +1,38 @@
+# ── Superpowers workflow artifacts (specs, plans — local only, never committed)
+docs/superpowers/
+
+# ── Dependencies
+node_modules/
+
+# ── Next.js
+.next/
+out/
+
+# ── Build output
+build/
+dist/
+*.tsbuildinfo
+
+# ── Environment & secrets — NEVER commit
+.env
+.env.*
+!.env.example
+
+# ── Local application data (MongrelDB db/, master.key, .env, logs)
+data/
+redi-data/
+
+# ── Logs
+logs/
+*.log
+
+# ── Test & coverage artifacts
+coverage/
+playwright-report/
+test-results/
+
+# ── OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
