@@ -1,6 +1,17 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { freshEmailTestDb } from '../helpers/emailTestDb';
 
+const { fetchByUidMock } = vi.hoisted(() => ({
+  fetchByUidMock: vi.fn(async () => ({
+    uid: 7,
+    messageId: '<reg-2026-041@stateu.edu>',
+    from: 'registrar@stateu.edu',
+    subject: 'Registration for Fall 2026 closes Friday',
+    receivedAt: new Date('2026-07-14T13:30:00.000Z'),
+    text: 'Your registration window closes July 24 at 5pm ET.',
+  })),
+}));
+
 vi.mock('../../src/server/notify/engine', () => ({
   enqueueNotification: vi.fn(async () => 'n-1'),
 }));
@@ -30,14 +41,7 @@ vi.mock('../../src/server/email/imapClient', async (importOriginal) => {
     ...original,
     createImapSource: () => ({
       fetchNew: async () => ({ uidvalidity: 1, rescan: false, messages: [] }),
-      fetchByUid: async () => ({
-        uid: 7,
-        messageId: '<reg-2026-041@stateu.edu>',
-        from: 'registrar@stateu.edu',
-        subject: 'Registration for Fall 2026 closes Friday',
-        receivedAt: new Date('2026-07-14T13:30:00.000Z'),
-        text: 'Your registration window closes July 24 at 5pm ET.',
-      }),
+      fetchByUid: fetchByUidMock,
     }),
   };
 });
@@ -75,6 +79,15 @@ const invoke = async <T>(name: string, params: unknown): Promise<T> => {
   if (!tool) throw new Error(`missing tool ${name}`);
   return await tool.handler(context, tool.paramsSchema.parse(params)) as T;
 };
+
+const insertPendingSummary = (id: string, emailId: string) => store.exec(
+  `INSERT INTO notifications (` +
+  `id, type, title, body, importance, channels, scheduled_for, status, related_type, related_id, ` +
+  `created_at, sent_at) VALUES (` +
+  `'${id}', 'email_summary', 'r', 'b', 'normal', '["in_app"]', ` +
+  `'2026-07-17T12:00:00.000Z', 'pending', 'email', '${emailId}', ` +
+  `'2026-07-17T12:00:00.000Z', NULL)`,
+);
 
 beforeAll(async () => {
   await freshEmailTestDb();
@@ -204,7 +217,9 @@ describe('processed email tools', () => {
       notified: false,
       processed_at: null,
     });
+    await insertPendingSummary(`prior-summary-${emailId}`, emailId);
     engineMock.enqueueNotification.mockClear();
+    fetchByUidMock.mockClear();
     const result = await invoke<{
       email: { classification: string; summary: string };
       events: Array<{ email_id: string }>;
@@ -213,6 +228,10 @@ describe('processed email tools', () => {
     expect(result.email.summary).toContain('registration');
     expect(result.events.filter((event) => event.email_id === emailId)).toHaveLength(1);
     expect(engineMock.enqueueNotification).toHaveBeenCalled();
+    expect(fetchByUidMock).toHaveBeenCalledWith('INBOX', 7, 1);
+    expect((await store.rows<{ status: string }>(
+      `SELECT status FROM notifications WHERE id = 'prior-summary-${emailId}'`,
+    ))[0]?.status).toBe('cancelled');
   });
 
   it('dismisses linked tasks and replaces events without duplicates', async () => {
@@ -257,6 +276,48 @@ describe('processed email tools', () => {
       classification: 'actionable',
     });
     expect(await store.listExtractedEventsForEmail(emailId)).toHaveLength(1);
+  });
+
+  it('rolls back pending-summary cancellation when reclassification enqueue fails', async () => {
+    const emailId = await store.insertProcessedEmail({
+      mailbox: 'INBOX',
+      uid: 13,
+      uidvalidity: 1,
+      message_id: '<reg-2026-041@stateu.edu>',
+      from_addr: 'registrar@stateu.edu',
+      subject: 'Registration for Fall 2026 closes Friday',
+      received_at: '2026-07-14T13:30:00.000Z',
+      classification: 'informational',
+      summary: 'Old summary',
+      extracted_count: 1,
+      notified: true,
+      processed_at: null,
+    });
+    const eventId = await store.insertExtractedEvent({
+      email_id: emailId,
+      title: 'Old event',
+      event_type: 'general',
+      due_at: null,
+      confidence: 0.5,
+      status: 'pending_review',
+      task_id: null,
+    });
+    await insertPendingSummary(`old-summary-${emailId}`, emailId);
+    engineMock.enqueueNotification.mockRejectedValueOnce(new Error('notification write failed'));
+
+    await expect(invoke('reclassify_email', {
+      id: emailId,
+      classification: 'actionable',
+    })).rejects.toThrow('notification write failed');
+
+    expect(await store.getProcessedEmail(emailId)).toMatchObject({
+      classification: 'informational',
+      summary: 'Old summary',
+    });
+    expect(await store.getExtractedEvent(eventId)).not.toBeNull();
+    expect((await store.rows<{ status: string }>(
+      `SELECT status FROM notifications WHERE id = 'old-summary-${emailId}'`,
+    ))[0]?.status).toBe('pending');
   });
 
   it('reclassifies to junk and clears summary and events', async () => {
@@ -343,6 +404,41 @@ describe('event review tools', () => {
     );
   });
 
+  it('creates one task when the same event is accepted concurrently', async () => {
+    const emailId = await store.insertProcessedEmail({
+      mailbox: 'INBOX',
+      uid: 11,
+      uidvalidity: 1,
+      message_id: '<concurrent@x>',
+      from_addr: 'bursar@stateu.edu',
+      subject: 'Concurrent deadline',
+      received_at: '2026-07-16T02:00:00.000Z',
+      classification: 'actionable',
+      summary: 'Deadline.',
+      extracted_count: 1,
+      notified: false,
+      processed_at: null,
+    });
+    const eventId = await store.insertExtractedEvent({
+      email_id: emailId,
+      title: 'Concurrent deadline',
+      event_type: 'payment',
+      due_at: '2026-08-01T04:00:00.000Z',
+      confidence: 0.8,
+      status: 'pending_review',
+      task_id: null,
+    });
+    callMock.callTool.mockClear();
+
+    const accepted = await Promise.all([
+      invoke<{ event: { task_id: string } }>('accept_event', { id: eventId }),
+      invoke<{ event: { task_id: string } }>('accept_event', { id: eventId }),
+    ]);
+
+    expect(accepted.map((result) => result.event.task_id)).toEqual(['task-9', 'task-9']);
+    expect(callMock.callTool).toHaveBeenCalledTimes(1);
+  });
+
   it('accepts without a task and dismisses a linked task', async () => {
     const emailId = await store.insertProcessedEmail({
       mailbox: 'INBOX',
@@ -384,5 +480,37 @@ describe('event review tools', () => {
       { id: 'task-9' },
       context,
     );
+  });
+
+  it('keeps an event accepted when linked task dismissal fails', async () => {
+    const emailId = await store.insertProcessedEmail({
+      mailbox: 'INBOX',
+      uid: 12,
+      uidvalidity: 1,
+      message_id: '<dismiss-failure@x>',
+      from_addr: 'x@y.edu',
+      subject: 'Dismiss failure',
+      received_at: '2026-07-16T03:00:00.000Z',
+      classification: 'actionable',
+      summary: 's',
+      extracted_count: 1,
+      notified: false,
+      processed_at: null,
+    });
+    const eventId = await store.insertExtractedEvent({
+      email_id: emailId,
+      title: 'Keep accepted',
+      event_type: 'general',
+      due_at: null,
+      confidence: 0.5,
+      status: 'accepted',
+      task_id: 'task-fails',
+    });
+    callMock.callTool.mockRejectedValueOnce(new Error('task dismissal failed'));
+
+    await expect(invoke('dismiss_event', { id: eventId }))
+      .rejects.toThrow('task dismissal failed');
+    expect(await store.getExtractedEvent(eventId))
+      .toMatchObject({ status: 'accepted', task_id: 'task-fails' });
   });
 });

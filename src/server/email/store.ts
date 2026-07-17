@@ -1,23 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { lit, sqlExec, sqlRows } from '../db/sql';
+import { lit, sqlExec, sqlRows, withSqlTransaction } from '../db/sql';
 
 export const rows = sqlRows;
 export const exec = sqlExec;
 
 export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
-  await exec('BEGIN');
-  try {
-    const result = await fn();
-    await exec('COMMIT');
-    return result;
-  } catch (error) {
-    try {
-      await exec('ROLLBACK');
-    } catch {
-      // The database may already have aborted the transaction.
-    }
-    throw error;
-  }
+  return withSqlTransaction(fn);
 }
 
 const num = (value: unknown): number =>
@@ -156,6 +144,7 @@ export async function listProcessedEmails(filter: {
 }
 
 export async function insertExtractedEvent(ev: {
+  id?: string;
   email_id: string;
   title: string;
   event_type: string;
@@ -163,11 +152,13 @@ export async function insertExtractedEvent(ev: {
   confidence: number;
   status: string;
   task_id: string | null;
+  created_at?: string;
 }): Promise<string> {
-  const id = randomUUID();
+  const id = ev.id ?? randomUUID();
+  const createdAt = ev.created_at ?? new Date().toISOString();
   await exec(
     `INSERT INTO extracted_events (id, email_id, title, event_type, due_at, confidence, status, task_id, created_at)
-     VALUES (${lit(id)}, ${lit(ev.email_id)}, ${lit(ev.title)}, ${lit(ev.event_type)}, ${lit(ev.due_at)}, ${ev.confidence}, ${lit(ev.status)}, ${lit(ev.task_id)}, ${lit(new Date())})`,
+     VALUES (${lit(id)}, ${lit(ev.email_id)}, ${lit(ev.title)}, ${lit(ev.event_type)}, ${lit(ev.due_at)}, ${ev.confidence}, ${lit(ev.status)}, ${lit(ev.task_id)}, ${lit(createdAt)})`,
   );
   return id;
 }
@@ -194,6 +185,14 @@ export async function updateExtractedEvent(
 
 export async function deleteExtractedEventsForEmail(emailId: string): Promise<void> {
   await exec(`DELETE FROM extracted_events WHERE email_id = ${lit(emailId)}`);
+}
+
+export async function cancelPendingEmailSummaries(emailId: string): Promise<void> {
+  await exec(
+    `UPDATE notifications SET status = 'cancelled' ` +
+    `WHERE type = 'email_summary' AND related_type = 'email' ` +
+    `AND related_id = ${lit(emailId)} AND status = 'pending'`,
+  );
 }
 
 export interface ExtractedEventWithEmail extends ExtractedEventRow {

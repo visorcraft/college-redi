@@ -106,6 +106,7 @@ describe('runEmailPipeline', () => {
     expect(engineMock.enqueueNotification).toHaveBeenCalledWith(expect.objectContaining({
       type: 'email_summary',
       importance: 'urgent',
+      body: expect.stringContaining('Registration closes'),
       relatedType: 'email',
       relatedId: emails[0].id,
     }));
@@ -192,6 +193,27 @@ describe('runEmailPipeline', () => {
     expect((await settings.getSettings()).imap.last_uid).toBe(104);
   });
 
+  it('leaves a new email unprocessed when child creation fails', async () => {
+    const eml = loadEml('actionable.eml')
+      .replace('<reg-2026-041@stateu.edu>', '<reg-child-failure@stateu.edu>');
+    callMock.callTool.mockRejectedValueOnce(new Error('task write failed'));
+
+    await expect(pipeline.runEmailPipeline({
+      source: fakeSource([{ uid: 107, eml }]),
+      triage: async () => actionable(),
+      now: () => new Date('2026-07-17T12:27:00Z'),
+    })).rejects.toThrow('task write failed');
+
+    const email = (await store.listProcessedEmails({ limit: 50, offset: 0 })).emails
+      .find((candidate) => candidate.uid === 107);
+    expect(email).toMatchObject({
+      classification: 'unprocessed',
+      extracted_count: 0,
+      processed_at: null,
+    });
+    expect(await store.listExtractedEventsForEmail(email!.id)).toEqual([]);
+  });
+
   it('stops after an invalid per-message result', async () => {
     const first = loadEml('junk.eml')
       .replace('<promo-8888@campusstore.example>', '<promo-105@campusstore.example>');
@@ -205,6 +227,35 @@ describe('runEmailPipeline', () => {
     expect(result.junk).toBe(1);
     expect(result.unprocessed).toBe(1);
     expect((await settings.getSettings()).imap.last_uid).toBe(105);
+  });
+
+  it('rolls back an actionable email when summary enqueue fails, then retries it', async () => {
+    const eml = loadEml('actionable.eml')
+      .replace('<reg-2026-041@stateu.edu>', '<reg-notify-failure@stateu.edu>');
+    engineMock.enqueueNotification.mockRejectedValueOnce(new Error('notification write failed'));
+
+    await expect(pipeline.runEmailPipeline({
+      source: fakeSource([{ uid: 108, eml }]),
+      triage: async () => actionable(),
+      now: () => new Date('2026-07-17T12:31:00Z'),
+    })).rejects.toThrow('notification write failed');
+
+    let email = (await store.listProcessedEmails({ limit: 50, offset: 0 })).emails
+      .find((candidate) => candidate.uid === 108);
+    expect(email).toMatchObject({
+      classification: 'unprocessed',
+      extracted_count: 0,
+      processed_at: null,
+    });
+    expect(await store.listExtractedEventsForEmail(email!.id)).toEqual([]);
+
+    expect((await pipeline.runEmailPipeline({
+      source: fakeSource([{ uid: 108, eml }]),
+      triage: async () => actionable(),
+      now: () => new Date('2026-07-17T12:32:00Z'),
+    })).actionable).toBe(1);
+    email = await store.getProcessedEmail(email!.id) ?? undefined;
+    expect(email).toMatchObject({ classification: 'actionable', notified: true });
   });
 
   it('dedupes a UIDVALIDITY rescan by Message-ID', async () => {

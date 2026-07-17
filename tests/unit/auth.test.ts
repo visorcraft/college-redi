@@ -1,14 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeTestEnv, resetServerState, type TestEnv } from '../helpers/env';
 import { hashPassword, verifyPassword } from '@/server/password';
-import { createSessionToken, newCsrfToken, readSessionToken, SESSION_TTL_SECONDS } from '@/server/auth';
+import { createSessionToken, newCsrfToken, readSessionToken, refreshSessionToken, SESSION_TTL_SECONDS } from '@/server/auth';
+import { runMigrations } from '@/server/db/migrate';
+import { setSecret } from '@/server/secrets';
 
 let env: TestEnv;
-beforeEach(async () => {
+beforeAll(async () => {
   env = makeTestEnv();
   await resetServerState();
+  await runMigrations();
 });
-afterEach(() => env.cleanup());
+afterAll(async () => {
+  await resetServerState();
+  env.cleanup();
+});
 
 describe('password hashing (Argon2id)', () => {
   it('hashes and verifies', async () => {
@@ -36,6 +42,24 @@ describe('session tokens (HMAC-signed, 14-day)', () => {
     const now = Date.now();
     const token = await createSessionToken(now);
     expect((await readSessionToken(token, now + (SESSION_TTL_SECONDS + 60) * 1000)).valid).toBe(false);
+  });
+
+  it('revokes existing tokens when the password hash changes', async () => {
+    await setSecret('login.password_hash', 'old-hash');
+    const token = await createSessionToken();
+    await setSecret('login.password_hash', 'new-hash');
+    expect((await readSessionToken(token)).valid).toBe(false);
+    expect((await readSessionToken(await createSessionToken())).valid).toBe(true);
+  });
+
+  it('does not upgrade a validated old session during password rotation', async () => {
+    await setSecret('login.password_hash', 'old-hash');
+    const session = await readSessionToken(await createSessionToken());
+    expect(session.valid).toBe(true);
+    if (!session.valid) throw new Error('expected valid session');
+    await setSecret('login.password_hash', 'new-hash');
+    const refreshed = await refreshSessionToken(session.passwordVersion);
+    expect((await readSessionToken(refreshed)).valid).toBe(false);
   });
 });
 

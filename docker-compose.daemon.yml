@@ -20,7 +20,8 @@ services:
     restart: always
 
   redi:
-    image: ghcr.io/visorcraft/redi:latest
+    build: .
+    image: redi:local
     network_mode: host
     env_file: ./redi-data/.env
     environment:
@@ -53,7 +54,8 @@ services:
 #     restart: always
 #
 #   redi:
-#     image: ghcr.io/visorcraft/redi:latest
+#     build: .
+#     image: redi:local
 #     env_file: ./redi-data/.env
 #     environment:
 #       DATABASE_MODE: remote

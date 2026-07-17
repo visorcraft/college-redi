@@ -133,8 +133,25 @@ describe('college email digest', () => {
     expect(items.map((item) => item.subject)).toEqual(['Summer hours']);
     expect(digest.renderCollegeEmailDigestSection(items))
       .toContain('Summer hours — Library open 8-6.');
-    expect(await digest.collectCollegeEmailDigestItems({ markIncluded: true })).toHaveLength(1);
-    expect(await digest.collectCollegeEmailDigestItems()).toHaveLength(0);
+    await store.insertProcessedEmail({
+      mailbox: 'INBOX',
+      uid: 4,
+      uidvalidity: 1,
+      message_id: '<d@x>',
+      from_addr: 'new@stateu.edu',
+      subject: 'Arrived during digest',
+      received_at: '2026-07-16T11:00:00.000Z',
+      classification: 'informational',
+      summary: 'Keep this for tomorrow.',
+      extracted_count: 0,
+      notified: false,
+      processed_at: null,
+    });
+    await digest.markCollegeEmailDigestItemsIncluded(
+      items.map(({ id }) => id),
+    );
+    expect((await digest.collectCollegeEmailDigestItems())
+      .map(({ subject }) => subject)).toEqual(['Arrived during digest']);
     expect(digest.renderCollegeEmailDigestSection([])).toBe('');
   });
 });

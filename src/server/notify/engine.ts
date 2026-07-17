@@ -82,14 +82,14 @@ export function isInQuietHours(at: Date, quiet: { start: string; end: string }, 
 }
 
 export function quietHoursEnd(at: Date, quiet: { start: string; end: string }, timeZone = 'UTC'): Date {
-  const end = parseHHMM(quiet.end);
   const probe = new Date(at.getTime());
   probe.setUTCSeconds(0, 0);
+  if (probe < at) probe.setTime(probe.getTime() + 60_000);
   for (let i = 0; i <= 26 * 60; i += 1) {
-    if (probe.getTime() >= at.getTime() && minutesOfDay(probe, timeZone) === end) return probe;
+    if (!isInQuietHours(probe, quiet, timeZone)) return probe;
     probe.setTime(probe.getTime() + 60_000);
   }
-  return new Date(at.getTime() + 8 * 3_600_000);
+  return probe;
 }
 
 export function applyQuietHours(at: Date, importance: Importance, settings: EngineSettings): Date {
@@ -116,6 +116,7 @@ export interface DispatchSummary { due: number; sent: number; failed: number; aw
 
 export const RETRY_BACKOFF_MS = [60_000, 15 * 60_000, 3_600_000] as const;
 const MAX_FAILED_ATTEMPTS = 1 + RETRY_BACKOFF_MS.length;
+const CHANNEL_CLAIM_MS = 10 * 60_000;
 
 type ChannelState = 'sent' | 'exhausted' | 'awaiting_retry' | 'ready';
 
@@ -161,7 +162,10 @@ async function deliver(
   return sendTwilioSms({ to, body: `${n.title}\n${n.body}`.slice(0, 1500) });
 }
 
-export async function dispatchDueNotifications(now = new Date()): Promise<DispatchSummary> {
+export async function dispatchDueNotifications(
+  now = new Date(),
+  signal?: AbortSignal,
+): Promise<DispatchSummary> {
   const settings = await loadEngineSettings();
   const quiet = settings.quiet_hours ?? DEFAULT_QUIET_HOURS;
   const tz = settings.timezone ?? 'UTC';
@@ -170,6 +174,7 @@ export async function dispatchDueNotifications(now = new Date()): Promise<Dispat
   );
   const summary: DispatchSummary = { due: due.length, sent: 0, failed: 0, awaiting_retry: 0, held: 0 };
   for (const n of due) {
+    signal?.throwIfAborted();
     if (n.importance !== 'urgent' && isInQuietHours(now, quiet, tz)) {
       await sqlExec(`UPDATE notifications SET scheduled_for = ${lit(quietHoursEnd(now, quiet, tz))} WHERE id = ${lit(n.id)}`);
       summary.held += 1;
@@ -177,15 +182,48 @@ export async function dispatchDueNotifications(now = new Date()): Promise<Dispat
     }
     const channels = JSON.parse(n.channels) as NotificationChannel[];
     for (const channel of channels) {
-      const { state, attempts } = await channelState(n.id, channel, now);
+      signal?.throwIfAborted();
+      const { state } = await channelState(n.id, channel, now);
       if (state !== 'ready') continue;
-      const insert = (status: 'sent' | 'failed', provider: Record<string, unknown>) =>
-        sqlExec(`INSERT INTO notification_history (id, notification_id, channel, destination, status, provider_response, attempt, sent_at) VALUES (${lit(randomUUID())}, ${lit(n.id)}, ${lit(channel)}, ${lit(destinationFor(channel, settings))}, ${lit(status)}, ${lit(JSON.stringify(provider))}, ${attempts + 1}, ${lit(now)})`);
+      const scheduler = await import('../scheduler');
+      const claimName = `notification:${n.id}:${channel}`;
+      const owner = await scheduler.acquireJobLeaseToken(
+        claimName,
+        CHANNEL_CLAIM_MS,
+        new Date(),
+      );
+      if (!owner) continue;
+      let channelLeaseLost = false;
+      const stopHeartbeat = scheduler.keepJobLeaseAlive(
+        claimName,
+        owner,
+        CHANNEL_CLAIM_MS,
+        () => {
+          channelLeaseLost = true;
+        },
+      );
       try {
-        await insert('sent', await deliver(channel, n, settings));
-      } catch (err) {
-        await insert('failed', { error: err instanceof Error ? err.message : String(err) });
+        const claimed = await channelState(n.id, channel, now);
+        if (claimed.state === 'ready') {
+          signal?.throwIfAborted();
+          if (channelLeaseLost) throw new Error(`notification channel lease lost: ${claimName}`);
+          let status: 'sent' | 'failed';
+          let provider: Record<string, unknown>;
+          try {
+            provider = await deliver(channel, n, settings);
+            status = 'sent';
+          } catch (err) {
+            provider = { error: err instanceof Error ? err.message : String(err) };
+            status = 'failed';
+          }
+          await sqlExec(`INSERT INTO notification_history (id, notification_id, channel, destination, status, provider_response, attempt, sent_at) VALUES (${lit(randomUUID())}, ${lit(n.id)}, ${lit(channel)}, ${lit(destinationFor(channel, settings))}, ${lit(status)}, ${lit(JSON.stringify(provider))}, ${claimed.attempts + 1}, ${lit(new Date())})`);
+        }
+      } finally {
+        stopHeartbeat();
+        await scheduler.releaseJobLease(claimName, 'ok', new Date(), owner);
       }
+      if (channelLeaseLost) throw new Error(`notification channel lease lost: ${claimName}`);
+      signal?.throwIfAborted();
     }
     const states = await Promise.all(channels.map((c) => channelState(n.id, c, now)));
     if (states.every((s) => s.state === 'sent')) {

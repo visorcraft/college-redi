@@ -48,8 +48,7 @@ export function categoryForEventType(type: string): string {
 }
 
 async function patchImap(patch: Record<string, unknown>): Promise<void> {
-  const current = (await getSettings()).imap;
-  await updateSettings({ imap: { ...current, ...patch } });
+  await updateSettings({ imap: patch });
 }
 
 interface PendingAi {
@@ -87,25 +86,26 @@ export async function recordTriageResult(
   result: TriageResult,
   deps: { now: Date; actor: string; autoAccept: boolean },
 ): Promise<{ id: string; notified: boolean }> {
+  const id = base.id ?? await store.insertProcessedEmail({
+    mailbox: base.mailbox,
+    uid: base.uid,
+    uidvalidity: base.uidvalidity,
+    message_id: base.message_id,
+    from_addr: base.from_addr,
+    subject: base.subject,
+    received_at: base.received_at,
+    classification: 'unprocessed',
+    summary: null,
+    extracted_count: 0,
+    notified: false,
+    processed_at: null,
+  });
   const persist = async () => {
     const shouldAccept = (confidence: number, dueAt: string | null) =>
       deps.autoAccept && confidence >= 0.9 && dueAt !== null;
 
-    const id = base.id ?? await store.insertProcessedEmail({
-      mailbox: base.mailbox,
-      uid: base.uid,
-      uidvalidity: base.uidvalidity,
-      message_id: base.message_id,
-      from_addr: base.from_addr,
-      subject: base.subject,
-      received_at: base.received_at,
-      classification: result.classification,
-      summary: result.summary,
-      extracted_count: 0,
-      notified: false,
-      processed_at: null,
-    });
     if (base.id) {
+      await store.cancelPendingEmailSummaries(id);
       await dismissLinkedTasksForEmail(id, deps.actor);
       await store.deleteExtractedEventsForEmail(id);
     }
@@ -125,7 +125,10 @@ export async function recordTriageResult(
         }, { actor: deps.actor }) as { id: string };
         taskId = task.id;
       }
-      const eventId = await store.insertExtractedEvent({
+      const eventId = crypto.randomUUID();
+      const createdAt = deps.now.toISOString();
+      await store.insertExtractedEvent({
+        id: eventId,
         email_id: id,
         title: event.title,
         event_type: event.event_type,
@@ -133,35 +136,36 @@ export async function recordTriageResult(
         confidence: event.confidence,
         status: accepted ? 'accepted' : 'pending_review',
         task_id: taskId,
+        created_at: createdAt,
       });
-      const stored = await store.getExtractedEvent(eventId);
-      if (stored) events.push(stored);
+      events.push({
+        id: eventId,
+        email_id: id,
+        title: event.title,
+        event_type: event.event_type,
+        due_at: event.due_at,
+        confidence: event.confidence,
+        status: accepted ? 'accepted' : 'pending_review',
+        task_id: taskId,
+        created_at: createdAt,
+      });
     }
 
     let notified = false;
     if (result.classification === 'actionable') {
-      try {
-        const { forwardActionableSummary } = await import('./forward');
-        await forwardActionableSummary(
-          {
-            id,
-            subject: base.subject,
-            from_addr: base.from_addr,
-            summary: result.summary,
-          },
-          events,
-          result.importance,
-          deps.now,
-        );
-        notified = true;
-      } catch (error) {
-        console.warn(JSON.stringify({
-          level: 'warn',
-          msg: 'email summary notification enqueue failed',
-          email_id: id,
-          error: error instanceof Error ? error.message : String(error),
-        }));
-      }
+      const { forwardActionableSummary } = await import('./forward');
+      await forwardActionableSummary(
+        {
+          id,
+          subject: base.subject,
+          from_addr: base.from_addr,
+          summary: result.summary,
+        },
+        events,
+        result.importance,
+        deps.now,
+      );
+      notified = true;
     }
     await store.updateProcessedEmail(id, {
       classification: result.classification,
@@ -172,7 +176,7 @@ export async function recordTriageResult(
     });
     return { id, notified };
   };
-  return base.id ? store.withTransaction(persist) : persist();
+  return store.withTransaction(persist);
 }
 
 const emptyResult = (): PipelineResult => ({

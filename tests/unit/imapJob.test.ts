@@ -89,6 +89,29 @@ describe('runImapPollJob', () => {
     expect(await job.runImapPollJob(NOW)).toEqual({ ran: false, reason: 'lease' });
   });
 
+  it('forces a due poll but still respects the lease', async () => {
+    await settings.updateSettings({
+      imap: {
+        last_poll_at: NOW.toISOString(),
+        next_poll_after: new Date(NOW.getTime() + 60_000).toISOString(),
+      },
+    });
+    expect((await job.runImapPollJob(NOW, { force: true, actor: 'user' })).ran)
+      .toBe(true);
+    expect(runEmailPipeline).toHaveBeenCalledWith({ actor: 'user' });
+
+    await store.upsertJobLease({
+      job_name: job.IMAP_POLL_JOB,
+      locked_until: new Date(NOW.getTime() + 60_000).toISOString(),
+      last_run_at: NOW.toISOString(),
+      last_status: 'running',
+    });
+    expect(await job.runImapPollJob(NOW, { force: true })).toEqual({
+      ran: false,
+      reason: 'lease',
+    });
+  });
+
   it('breaks a stale lease and runs', async () => {
     await store.upsertJobLease({
       job_name: job.IMAP_POLL_JOB,
@@ -99,37 +122,104 @@ describe('runImapPollJob', () => {
     expect((await job.runImapPollJob(NOW)).ran).toBe(true);
   });
 
+  it('renews the lease while a valid poll is still running', async () => {
+    let finish!: (value: object) => void;
+    let started!: () => void;
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    runEmailPipeline.mockImplementationOnce(() => new Promise((resolve) => {
+      finish = resolve;
+      started();
+    }));
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    try {
+      const first = job.runImapPollJob(NOW);
+      await running;
+      await vi.advanceTimersByTimeAsync(11 * 60_000);
+      expect(await job.runImapPollJob(new Date())).toEqual({
+        ran: false,
+        reason: 'lease',
+      });
+      finish({});
+      expect((await first).ran).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('backs off 5m then 10m on failures', async () => {
-    runEmailPipeline.mockRejectedValue(new Error('IMAP auth failed'));
-    expect(await job.runImapPollJob(NOW)).toMatchObject({
-      ran: true,
-      error: 'IMAP auth failed',
-    });
-    let imap = (await settings.getSettings()).imap;
-    expect(imap.last_error).toBe('IMAP auth failed');
-    expect(imap.backoff_step).toBe(1);
-    expect(imap.next_poll_after).toBe(new Date(NOW.getTime() + 5 * 60_000).toISOString());
-    expect((await store.getJobLease(job.IMAP_POLL_JOB))?.last_status).toBe('error');
-    expect(await job.runImapPollJob(new Date(NOW.getTime() + 3 * 60_000))).toEqual({
-      ran: false,
-      reason: 'backoff',
-    });
-    const retryAt = new Date(NOW.getTime() + 6 * 60_000);
-    expect((await job.runImapPollJob(retryAt)).ran).toBe(true);
-    imap = (await settings.getSettings()).imap;
-    expect(imap.backoff_step).toBe(2);
-    expect(imap.next_poll_after).toBe(
-      new Date(retryAt.getTime() + 10 * 60_000).toISOString(),
-    );
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    try {
+      runEmailPipeline.mockRejectedValue(new Error('IMAP auth failed'));
+      expect(await job.runImapPollJob(NOW)).toMatchObject({
+        ran: true,
+        error: 'IMAP auth failed',
+      });
+      let imap = (await settings.getSettings()).imap;
+      expect(imap.last_error).toBe('IMAP auth failed');
+      expect(imap.backoff_step).toBe(1);
+      expect(imap.next_poll_after).toBe(new Date(NOW.getTime() + 5 * 60_000).toISOString());
+      expect((await store.getJobLease(job.IMAP_POLL_JOB))?.last_status).toBe('error');
+      expect(await job.runImapPollJob(new Date(NOW.getTime() + 3 * 60_000))).toEqual({
+        ran: false,
+        reason: 'backoff',
+      });
+      const retryAt = new Date(NOW.getTime() + 6 * 60_000);
+      vi.setSystemTime(retryAt);
+      expect((await job.runImapPollJob(retryAt)).ran).toBe(true);
+      imap = (await settings.getSettings()).imap;
+      expect(imap.backoff_step).toBe(2);
+      expect(imap.next_poll_after).toBe(
+        new Date(retryAt.getTime() + 10 * 60_000).toISOString(),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('caps backoff at 60m', async () => {
-    runEmailPipeline.mockRejectedValue(new Error('down'));
-    await settings.updateSettings({ imap: { backoff_step: 3 } });
-    await job.runImapPollJob(NOW);
-    const imap = (await settings.getSettings()).imap;
-    expect(imap.backoff_step).toBe(3);
-    expect(imap.next_poll_after).toBe(new Date(NOW.getTime() + 60 * 60_000).toISOString());
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    try {
+      runEmailPipeline.mockRejectedValue(new Error('down'));
+      await settings.updateSettings({ imap: { backoff_step: 3 } });
+      await job.runImapPollJob(NOW);
+      const imap = (await settings.getSettings()).imap;
+      expect(imap.backoff_step).toBe(3);
+      expect(imap.next_poll_after).toBe(new Date(NOW.getTime() + 60 * 60_000).toISOString());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts failure backoff when the failed poll finishes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    try {
+      let started!: () => void;
+      const running = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      runEmailPipeline.mockImplementationOnce(async () => {
+        started();
+        await new Promise((resolve) => setTimeout(resolve, 2 * 60_000));
+        throw new Error('late failure');
+      });
+      const poll = job.runImapPollJob(NOW);
+      await running;
+      await vi.advanceTimersByTimeAsync(2 * 60_000);
+      await poll;
+      const failedAt = new Date(NOW.getTime() + 2 * 60_000);
+      expect((await settings.getSettings()).imap).toMatchObject({
+        last_poll_at: failedAt.toISOString(),
+        next_poll_after: new Date(failedAt.getTime() + 5 * 60_000).toISOString(),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

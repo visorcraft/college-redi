@@ -16,22 +16,25 @@ Every capability is implemented once as a typed tool and exposed through REST, R
 ### Docker
 
 ```bash
-docker run -d --name redi \
-  -p 3000:3000 \
-  -v ./redi-data:/data \
-  ghcr.io/visorcraft/redi:latest
+git clone https://github.com/visorcraft/college-redi.git
+cd college-redi
+docker compose up -d --build
+docker compose exec redi sed -n 's/^REDI_SETUP_TOKEN=//p' /data/.env
 ```
 
 ### Podman
 
 ```bash
-podman run -d --name redi \
-  -p 3000:3000 \
-  -v ./redi-data:/data \
-  ghcr.io/visorcraft/redi:latest
+git clone https://github.com/visorcraft/college-redi.git
+cd college-redi
+podman compose up -d --build
+podman compose exec redi sed -n 's/^REDI_SETUP_TOKEN=//p' /data/.env
 ```
 
-The all-in-one image uses embedded MongrelDB. The included `docker-compose.yml` also works with `podman-compose` and `podman compose`.
+The locally built all-in-one image uses embedded MongrelDB. The included
+`docker-compose.yml` also works with `podman-compose`. The `compose exec`
+command reads the setup token inside the root-owned container because the
+host copy at `./redi-data/.env` has mode `0600`.
 
 ### Local development
 

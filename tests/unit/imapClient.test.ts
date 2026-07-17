@@ -3,6 +3,7 @@ import {
   fetchMessageByUid,
   fetchNewMessages,
   htmlToText,
+  ImapUidvalidityChangedError,
 } from '../../src/server/email/imapClient';
 import { FakeImapConnection, loadEml } from '../fixtures/imap/fakeImapConnection';
 
@@ -19,6 +20,7 @@ describe('imapClient.fetchNewMessages', () => {
     expect(result.messages).toHaveLength(200);
     expect(result.messages[0].uid).toBe(51);
     expect(result.messages[199].uid).toBe(250);
+    expect(connection.calls).toContain('getMailboxLock:INBOX:readOnly');
     expect(connection.calls).toContain('release');
   });
 
@@ -76,6 +78,17 @@ describe('imapClient.fetchNewMessages', () => {
   it('fetchMessageByUid returns null when the uid does not exist', async () => {
     const connection = new FakeImapConnection({ uidvalidity: 1, messages: [] });
     expect(await fetchMessageByUid(connection, 'INBOX', 42)).toBeNull();
+  });
+
+  it('does not fetch a stored uid after UIDVALIDITY changes', async () => {
+    const connection = new FakeImapConnection({
+      uidvalidity: 2,
+      messages: [{ uid: 1, eml: loadEml('actionable.eml') }],
+    });
+    await expect(fetchMessageByUid(connection, 'INBOX', 1, 1))
+      .rejects.toBeInstanceOf(ImapUidvalidityChangedError);
+    expect(connection.calls.some((call) => call.startsWith('fetchOne:1:'))).toBe(false);
+    expect(connection.calls).toContain('release');
   });
 });
 

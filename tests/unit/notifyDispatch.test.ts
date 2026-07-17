@@ -1,9 +1,13 @@
 import { beforeAll, beforeEach, afterAll, describe, expect, it, vi } from 'vitest';
 import { cleanTables, setupTestDb, teardownTestDb } from '../helpers/p4';
 
-const mocks = vi.hoisted(() => ({ sendMail: vi.fn(), smsCreate: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  createTransport: vi.fn(),
+  sendMail: vi.fn(),
+  smsCreate: vi.fn(),
+}));
 vi.mock('nodemailer', () => ({
-  default: { createTransport: vi.fn(() => ({ sendMail: mocks.sendMail })) },
+  default: { createTransport: mocks.createTransport },
 }));
 vi.mock('twilio', () => ({
   default: vi.fn(() => ({ messages: { create: mocks.smsCreate } })),
@@ -23,6 +27,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await cleanTables();
+  mocks.createTransport.mockReset().mockReturnValue({ sendMail: mocks.sendMail });
   mocks.sendMail.mockReset().mockResolvedValue({ messageId: 'msg-1' });
   mocks.smsCreate.mockReset().mockResolvedValue({ sid: 'SM1' });
   await updateSettings({
@@ -59,41 +64,58 @@ describe('dispatchDueNotifications (spec §6.5.2)', () => {
   });
 
   it('retries a failed channel only after its 1m backoff, then succeeds', async () => {
-    mocks.sendMail.mockRejectedValueOnce(new Error('smtp down'));
-    const id = await engine.enqueueNotification({
-      type: 'system', title: 'Hi', body: 'b', importance: 'normal', scheduledFor: T0,
-    });
-    expect((await engine.dispatchDueNotifications(T0)).awaiting_retry).toBe(1);
-    expect((await historyFor(id)).map((h) => `${h.channel}:${h.status}`))
-      .toEqual(['email:failed', 'in_app:sent']);
-    expect((await engine.dispatchDueNotifications(new Date(T0.getTime() + 30_000))).awaiting_retry).toBe(1);
-    expect(await historyFor(id)).toHaveLength(2);
-    expect((await engine.dispatchDueNotifications(new Date(T0.getTime() + 61_000))).sent).toBe(1);
-    expect((await historyFor(id)).map((h) => `${h.channel}:${h.status}`))
-      .toEqual(['email:failed', 'in_app:sent', 'email:sent']);
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    try {
+      mocks.sendMail.mockRejectedValueOnce(new Error('smtp down'));
+      const id = await engine.enqueueNotification({
+        type: 'system', title: 'Hi', body: 'b', importance: 'normal', scheduledFor: T0,
+      });
+      expect((await engine.dispatchDueNotifications(T0)).awaiting_retry).toBe(1);
+      expect((await historyFor(id)).map((h) => `${h.channel}:${h.status}`))
+        .toEqual(['email:failed', 'in_app:sent']);
+      vi.setSystemTime(new Date(T0.getTime() + 30_000));
+      expect((await engine.dispatchDueNotifications(new Date())).awaiting_retry).toBe(1);
+      expect(await historyFor(id)).toHaveLength(2);
+      vi.setSystemTime(new Date(T0.getTime() + 61_000));
+      expect((await engine.dispatchDueNotifications(new Date())).sent).toBe(1);
+      expect((await historyFor(id)).map((h) => `${h.channel}:${h.status}`))
+        .toEqual(['email:failed', 'in_app:sent', 'email:sent']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('marks failed after the initial attempt plus 3 retries (1m/15m/1h) all fail', async () => {
-    mocks.sendMail.mockRejectedValue(new Error('smtp down'));
-    const id = await engine.enqueueNotification({
-      type: 'system',
-      title: 'Hi',
-      body: 'b',
-      importance: 'normal',
-      channels: ['email'],
-      scheduledFor: T0,
-    });
-    const at = (ms: number) => new Date(T0.getTime() + ms);
-    await engine.dispatchDueNotifications(T0);
-    await engine.dispatchDueNotifications(at(2 * 60_000));
-    await engine.dispatchDueNotifications(at(18 * 60_000));
-    expect((await engine.dispatchDueNotifications(at(80 * 60_000))).failed).toBe(1);
-    const history = await historyFor(id);
-    expect(history).toHaveLength(4);
-    expect(history.every((h) => h.status === 'failed')).toBe(true);
-    expect((await sqlRows<{ status: string }>(
-      `SELECT status FROM notifications WHERE id = '${id}'`,
-    ))[0]?.status).toBe('failed');
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    try {
+      mocks.sendMail.mockRejectedValue(new Error('smtp down'));
+      const id = await engine.enqueueNotification({
+        type: 'system',
+        title: 'Hi',
+        body: 'b',
+        importance: 'normal',
+        channels: ['email'],
+        scheduledFor: T0,
+      });
+      const at = (ms: number) => new Date(T0.getTime() + ms);
+      await engine.dispatchDueNotifications(T0);
+      vi.setSystemTime(at(2 * 60_000));
+      await engine.dispatchDueNotifications(new Date());
+      vi.setSystemTime(at(18 * 60_000));
+      await engine.dispatchDueNotifications(new Date());
+      vi.setSystemTime(at(80 * 60_000));
+      expect((await engine.dispatchDueNotifications(new Date())).failed).toBe(1);
+      const history = await historyFor(id);
+      expect(history).toHaveLength(4);
+      expect(history.every((h) => h.status === 'failed')).toBe(true);
+      expect((await sqlRows<{ status: string }>(
+        `SELECT status FROM notifications WHERE id = '${id}'`,
+      ))[0]?.status).toBe('failed');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('holds non-urgent deliveries inside quiet hours and flushes them at quiet end', async () => {
@@ -111,5 +133,63 @@ describe('dispatchDueNotifications (spec §6.5.2)', () => {
       `SELECT scheduled_for FROM notifications WHERE id = '${id}'`,
     ))[0]?.scheduled_for).toBe('2026-03-11T08:00:00.000Z');
     expect((await engine.dispatchDueNotifications(new Date('2026-03-11T08:00:01.000Z'))).sent).toBe(1);
+  });
+
+  it('claims each channel while delivery is in flight', async () => {
+    let finish!: (value: { messageId: string }) => void;
+    let started!: () => void;
+    const sending = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    mocks.sendMail.mockImplementationOnce(() => new Promise((resolve) => {
+      finish = resolve;
+      started();
+    }));
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    try {
+      const id = await engine.enqueueNotification({
+        type: 'system',
+        title: 'Hi',
+        body: 'b',
+        importance: 'normal',
+        channels: ['email'],
+        scheduledFor: T0,
+      });
+      const first = engine.dispatchDueNotifications(T0);
+      await sending;
+      await vi.advanceTimersByTimeAsync(11 * 60_000);
+      await engine.dispatchDueNotifications(new Date());
+      expect(mocks.sendMail).toHaveBeenCalledOnce();
+      finish({ messageId: 'msg-1' });
+      expect((await first).sent).toBe(1);
+      expect(await historyFor(id)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ends quiet hours at the first valid instant after a DST gap', () => {
+    expect(engine.quietHoursEnd(
+      new Date('2026-03-08T07:30:00.000Z'),
+      { start: '22:00', end: '02:30' },
+      'America/Chicago',
+    ).toISOString()).toBe('2026-03-08T08:00:00.000Z');
+  });
+
+  it('requires TLS upgrade for STARTTLS delivery', async () => {
+    await updateSettings({ smtp: { security: 'starttls', port: 587 } });
+    await engine.enqueueNotification({
+      type: 'system',
+      title: 'Hi',
+      body: 'b',
+      importance: 'normal',
+      channels: ['email'],
+      scheduledFor: T0,
+    });
+    await engine.dispatchDueNotifications(T0);
+    expect(mocks.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({ secure: false, requireTLS: true }),
+    );
   });
 });

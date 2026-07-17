@@ -146,7 +146,7 @@ const testImapConnection = {
     });
     try {
       await client.connect();
-      const mailbox = await client.mailboxOpen(imap.mailbox ?? 'INBOX');
+      const mailbox = await client.mailboxOpen(imap.mailbox ?? 'INBOX', { readOnly: true });
       const status = await client.status(mailbox.path, { unseen: true });
       return { ok: true, mailbox: mailbox.path, unseen: status.unseen ?? 0 };
     } catch (err) {

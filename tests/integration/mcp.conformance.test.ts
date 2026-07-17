@@ -129,11 +129,23 @@ describe('MCP conformance', () => {
     })).status).toBe(401);
   });
 
-  it('lists exactly the registry tools with identical schemas', async () => {
+  it('lists exactly the safe registry tools with identical schemas', async () => {
     const client = await connectClient(rawToken);
     const { tools } = await client.listTools();
     const { getAllTools } = await import('../../src/server/tools/registry');
-    const registry = getAllTools();
+    const blocked = new Set([
+      'update_settings',
+      'set_secret',
+      'test_ai_connection',
+      'test_imap_connection',
+      'test_smtp_connection',
+      'test_twilio_connection',
+      'create_mcp_token',
+      'list_mcp_tokens',
+      'revoke_mcp_token',
+      'send_test_notification',
+    ]);
+    const registry = getAllTools().filter(({ name }) => !blocked.has(name));
     expect(tools.map((tool) => tool.name).sort())
       .toEqual(registry.map((tool) => tool.name).sort());
     for (const tool of registry) {
@@ -153,29 +165,26 @@ describe('MCP conformance', () => {
     expect(read.isError).toBeFalsy();
     expect(parseToolJson(read)).toBeTypeOf('object');
 
-    const write = await client.callTool({
+    const blocked = await client.callTool({
       name: 'create_mcp_token',
       arguments: { name: 'via-mcp' },
     });
+    expect(blocked.isError).toBe(true);
+    const blockedSend = await client.callTool({
+      name: 'send_test_notification',
+      arguments: { channel: 'sms' },
+    });
+    expect(blockedSend.isError).toBe(true);
+    const write = await client.callTool({
+      name: 'create_task',
+      arguments: { title: 'MCP conformance task' },
+    });
     expect(write.isError).toBeFalsy();
-    const created = parseToolJson(write) as { id: string; token: string };
-    expect(created.token).toMatch(/^redi_/);
-    const noConfirm = await client.callTool({
-      name: 'revoke_mcp_token',
-      arguments: { id: created.id },
-    });
-    expect(noConfirm.isError).toBe(true);
-    const confirmed = await client.callTool({
-      name: 'revoke_mcp_token',
-      arguments: { id: created.id, confirm: true },
-    });
-    expect(confirmed.isError).toBeFalsy();
-    expect(parseToolJson(confirmed)).toMatchObject({ revoked: true });
 
     const { queryRows } = await import('../../src/server/db/sql');
     const audit = await queryRows<{ actor: string }>(
       "SELECT actor FROM audit_log WHERE actor = 'mcp:conformance' " +
-      "AND tool_name = 'create_mcp_token'",
+      "AND tool_name = 'create_task'",
     );
     expect(audit.length).toBeGreaterThanOrEqual(1);
     await client.close();

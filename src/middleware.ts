@@ -1,13 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createSessionToken, readSessionToken, SESSION_COOKIE, SESSION_TTL_SECONDS } from './server/auth';
+import { readSessionToken, refreshSessionToken, SESSION_COOKIE, SESSION_TTL_SECONDS } from './server/auth';
 import {
   applySecurityHeaders,
-  clientIp,
   contentSecurityPolicy,
   csrfFailure,
   ensureCsrfCookie,
   isSecureRequest,
-  rateLimitExceeded,
+  requestRateLimitExceeded,
   rateLimitResponse,
   RATE_LIMITS,
 } from './server/security';
@@ -25,31 +24,21 @@ export default async function middleware(req: NextRequest) {
   });
   const secure = (response: NextResponse) =>
     ensureCsrfCookie(applySecurityHeaders(response, req, nonce), req);
-  const ip = clientIp(req);
 
   if (
-    pathname === '/api/auth/login'
-    && ip !== null
-    && rateLimitExceeded(
-      `login:${ip}`,
-      RATE_LIMITS.login.limit,
-      RATE_LIMITS.login.windowMs,
-    )
-  ) return secure(rateLimitResponse());
-  if (
     pathname === '/api/cron/tick'
-    && ip !== null
-    && rateLimitExceeded(
-      `cron:${ip}`,
+    && requestRateLimitExceeded(
+      req,
+      'cron',
       RATE_LIMITS.cron.limit,
       RATE_LIMITS.cron.windowMs,
     )
   ) return secure(rateLimitResponse());
   if (
     pathname.startsWith('/mcp')
-    && ip !== null
-    && rateLimitExceeded(
-      `mcp:${ip}`,
+    && requestRateLimitExceeded(
+      req,
+      'mcp',
       RATE_LIMITS.mcp.limit,
       RATE_LIMITS.mcp.windowMs,
     )
@@ -60,10 +49,10 @@ export default async function middleware(req: NextRequest) {
   if (pathname.startsWith('/mcp')) return secure(next());
   if (PUBLIC_API_PATHS.has(pathname)) return secure(next());
 
-  const { valid } = await readSessionToken(req.cookies.get(SESSION_COOKIE)?.value);
+  const session = await readSessionToken(req.cookies.get(SESSION_COOKIE)?.value);
   const isApi = pathname.startsWith('/api/');
 
-  if (!valid) {
+  if (!session.valid) {
     if (pathname === '/login' || pathname === '/wizard') {
       return secure(next());
     }
@@ -85,7 +74,7 @@ export default async function middleware(req: NextRequest) {
 
   const res = next();
   // Rolling 14-day session: re-issue on every authenticated request.
-  res.cookies.set(SESSION_COOKIE, await createSessionToken(), {
+  res.cookies.set(SESSION_COOKIE, await refreshSessionToken(session.passwordVersion), {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',

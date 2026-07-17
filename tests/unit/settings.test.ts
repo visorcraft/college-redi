@@ -46,5 +46,6 @@ describe('settings store', () => {
   it('rejects invalid values', async () => {
     await expect(updateSettings({ ai: { effort: 'extreme' as never } })).rejects.toThrow();
     await expect(updateSettings({ imap: { poll_interval_minutes: 0 } })).rejects.toThrow();
+    await expect(updateSettings({ timezone: 'Mars/Olympus' })).rejects.toThrow();
   });
 });

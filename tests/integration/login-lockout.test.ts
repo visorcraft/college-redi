@@ -76,4 +76,26 @@ it('claims once under a setup race and locks each client independently', async (
   }));
   expect((await tlsLogin).headers.getSetCookie().every((cookie) =>
     cookie.includes('Secure'))).toBe(true);
+
+  process.env.TRUST_PROXY_HOPS = '0';
+  for (let i = 0; i < 5; i += 1) {
+    const response = await login(new NextRequest('http://test', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: `redi_csrf=attacker-chosen-${i}-0123456789`,
+      },
+      body: JSON.stringify({ password: 'wrong-password' }),
+    }));
+    expect(response.status).toBe(401);
+  }
+  const directLogin = await login(new NextRequest('http://test', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      cookie: 'redi_csrf=another-attacker-value-0123456789',
+    },
+    body: JSON.stringify({ password: 'the-real-password-123' }),
+  }));
+  expect(directLogin.status).toBe(200);
 });

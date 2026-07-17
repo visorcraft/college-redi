@@ -70,4 +70,23 @@ describe('POST /api/cron/tick', () => {
       `SELECT actor, tool_name FROM audit_log WHERE tool_name = 'cron_tick'`,
     ))[0]).toEqual({ actor: 'cron', tool_name: 'cron_tick' });
   });
+
+  it('reports dispatch failure and audits it as failed', async () => {
+    await setSecret('cron.secret_hash', 'stored-hash');
+    const id = await enqueue({
+      type: 'system',
+      title: 'hello',
+      body: 'b',
+      importance: 'urgent',
+      scheduledFor: new Date(Date.now() - 60_000),
+    });
+    await sqlExec(`UPDATE notifications SET channels = 'not-json' WHERE id = '${id}'`);
+    const res = await POST(request('right-secret'));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ ok: false });
+    const audit = (await sqlRows<{ detail: string }>(
+      `SELECT detail FROM audit_log WHERE tool_name = 'cron_tick' ORDER BY created_at DESC LIMIT 1`,
+    ))[0];
+    expect(JSON.parse(audit?.detail ?? '{}')).toMatchObject({ ok: false });
+  });
 });

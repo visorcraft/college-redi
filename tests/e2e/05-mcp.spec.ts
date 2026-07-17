@@ -26,7 +26,7 @@ test('agent token connects a real MCP client', async ({ page }) => {
   const { tools } = await client.listTools();
   expect(tools.length).toBeGreaterThan(10);
   const call = await client.callTool({
-    name: 'list_mcp_tokens',
+    name: 'get_system_status',
     arguments: {},
   });
   expect(call.isError).toBeFalsy();

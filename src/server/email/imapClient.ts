@@ -16,7 +16,10 @@ export interface MailboxInfo {
 
 export interface ImapConnection {
   connect(): Promise<void>;
-  getMailboxLock(path: string): Promise<{ mailbox: MailboxInfo; release(): void }>;
+  getMailboxLock(
+    path: string,
+    options?: { readOnly?: boolean },
+  ): Promise<{ mailbox: MailboxInfo; release(): void }>;
   fetch(
     range: string,
     query: Record<string, unknown>,
@@ -49,6 +52,13 @@ export class ImapNotConfiguredError extends Error {
   constructor() {
     super('IMAP is not configured');
     this.name = 'ImapNotConfiguredError';
+  }
+}
+
+export class ImapUidvalidityChangedError extends Error {
+  constructor(readonly expected: number, readonly actual: number) {
+    super(`mailbox UIDVALIDITY changed from ${expected} to ${actual}`);
+    this.name = 'ImapUidvalidityChangedError';
   }
 }
 
@@ -134,7 +144,7 @@ export async function fetchNewMessages(
   lastUid: number,
   lastUidvalidity: number | null,
 ): Promise<FetchNewResult> {
-  const lock = await connection.getMailboxLock(mailbox);
+  const lock = await connection.getMailboxLock(mailbox, { readOnly: true });
   try {
     const uidvalidity = Number(lock.mailbox.uidvalidity);
     const exists = Number(lock.mailbox.exists);
@@ -169,9 +179,14 @@ export async function fetchMessageByUid(
   connection: ImapConnection,
   mailbox: string,
   uid: number,
+  expectedUidvalidity?: number,
 ): Promise<FetchedEmail | null> {
-  const lock = await connection.getMailboxLock(mailbox);
+  const lock = await connection.getMailboxLock(mailbox, { readOnly: true });
   try {
+    const uidvalidity = Number(lock.mailbox.uidvalidity);
+    if (expectedUidvalidity !== undefined && uidvalidity !== expectedUidvalidity) {
+      throw new ImapUidvalidityChangedError(expectedUidvalidity, uidvalidity);
+    }
     const raw = await connection.fetchOne(uid, FETCH_QUERY, { uid: true });
     return raw ? toFetchedEmail(raw) : null;
   } finally {
@@ -196,8 +211,8 @@ class ImapFlowConnection implements ImapConnection {
     await this.client.connect();
   }
 
-  async getMailboxLock(path: string) {
-    const lock = await this.client.getMailboxLock(path);
+  async getMailboxLock(path: string, options?: { readOnly?: boolean }) {
+    const lock = await this.client.getMailboxLock(path, options);
     const mailbox = this.client.mailbox;
     return {
       mailbox: {
@@ -227,7 +242,11 @@ export interface ImapSource {
     lastUid: number,
     lastUidvalidity: number | null,
   ): Promise<FetchNewResult>;
-  fetchByUid(mailbox: string, uid: number): Promise<FetchedEmail | null>;
+  fetchByUid(
+    mailbox: string,
+    uid: number,
+    expectedUidvalidity?: number,
+  ): Promise<FetchedEmail | null>;
 }
 
 export function createImapSource(): ImapSource {
@@ -249,7 +268,9 @@ export function createImapSource(): ImapSource {
       withConnection((connection) =>
         fetchNewMessages(connection, mailbox, lastUid, lastUidvalidity),
       ),
-    fetchByUid: (mailbox, uid) =>
-      withConnection((connection) => fetchMessageByUid(connection, mailbox, uid)),
+    fetchByUid: (mailbox, uid, expectedUidvalidity) =>
+      withConnection((connection) =>
+        fetchMessageByUid(connection, mailbox, uid, expectedUidvalidity),
+      ),
   };
 }

@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { triageMessages } from '../ai/triage';
-import { createImapSource } from '../email/imapClient';
+import { createImapSource, ImapUidvalidityChangedError } from '../email/imapClient';
+import { runImapPollJob } from '../email/imapJob';
 import {
   categoryForEventType,
   dismissLinkedTasksForEmail,
   recordTriageResult,
-  runEmailPipeline,
 } from '../email/pipeline';
 import * as store from '../email/store';
 import { getSettings } from '../settings';
@@ -61,7 +61,14 @@ const check_email_now = defineTool({
   description: 'Run one IMAP poll and AI triage cycle now.',
   sideEffect: 'write',
   paramsSchema: checkEmailNowParams,
-  handler: (context) => runEmailPipeline({ actor: context.actor }),
+  handler: async (context) => {
+    const outcome = await runImapPollJob(new Date(), {
+      force: true,
+      actor: context.actor,
+    });
+    if (outcome.error) throw new ToolError('internal', outcome.error, 500);
+    return outcome.result ?? outcome;
+  },
 });
 
 const list_processed_emails = defineTool({
@@ -94,6 +101,7 @@ const reclassify_email = defineTool({
     if (!row) throw new NotFoundError(`email ${params.id} not found`);
     if (params.classification === 'junk') {
       await store.withTransaction(async () => {
+        await store.cancelPendingEmailSummaries(row.id);
         await dismissLinkedTasksForEmail(row.id, context.actor);
         await store.deleteExtractedEventsForEmail(row.id);
         await store.updateProcessedEmail(row.id, {
@@ -104,7 +112,19 @@ const reclassify_email = defineTool({
       });
       return { email: await store.getProcessedEmail(row.id), events: [] };
     }
-    const message = await createImapSource().fetchByUid(row.mailbox, row.uid);
+    let message;
+    try {
+      message = await createImapSource().fetchByUid(
+        row.mailbox,
+        row.uid,
+        row.uidvalidity,
+      );
+    } catch (error) {
+      if (error instanceof ImapUidvalidityChangedError) {
+        throw new ToolError('conflict', error.message, 409);
+      }
+      throw error;
+    }
     if (!message) throw new NotFoundError('message is no longer available on the IMAP server');
     if (message.messageId && row.message_id && message.messageId !== row.message_id) {
       throw new ToolError(
@@ -193,34 +213,36 @@ const accept_event = defineTool({
   sideEffect: 'write',
   paramsSchema: acceptEventParams,
   handler: async (context, params) => {
-    const event = await store.getExtractedEvent(params.id);
-    if (!event) throw new NotFoundError(`event ${params.id} not found`);
-    if (event.status === 'dismissed') {
-      throw new ToolError('conflict', 'event was dismissed; cannot accept it', 409);
-    }
-    let taskId = event.task_id;
-    if (params.create_task && !taskId) {
-      const email = await store.getProcessedEmail(event.email_id);
-      const { callTool } = await import('./call');
-      const task = await callTool('create_task', {
-        title: params.title ?? event.title,
-        description: email
-          ? `From email "${email.subject}" (${email.from_addr})${email.summary ? `: ${email.summary}` : ''}`
-          : null,
-        category: params.category ?? categoryForEventType(event.event_type),
-        due_at: params.due_at !== undefined ? params.due_at : event.due_at,
-        source: 'email',
-        source_email_id: event.email_id,
-      }, context) as { id: string };
-      taskId = task.id;
-    }
-    await store.updateExtractedEvent(event.id, {
-      status: 'accepted',
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.due_at !== undefined ? { due_at: params.due_at } : {}),
-      task_id: taskId,
+    await store.withTransaction(async () => {
+      const event = await store.getExtractedEvent(params.id);
+      if (!event) throw new NotFoundError(`event ${params.id} not found`);
+      if (event.status === 'dismissed') {
+        throw new ToolError('conflict', 'event was dismissed; cannot accept it', 409);
+      }
+      let taskId = event.task_id;
+      if (params.create_task && !taskId) {
+        const email = await store.getProcessedEmail(event.email_id);
+        const { callTool } = await import('./call');
+        const task = await callTool('create_task', {
+          title: params.title ?? event.title,
+          description: email
+            ? `From email "${email.subject}" (${email.from_addr})${email.summary ? `: ${email.summary}` : ''}`
+            : null,
+          category: params.category ?? categoryForEventType(event.event_type),
+          due_at: params.due_at !== undefined ? params.due_at : event.due_at,
+          source: 'email',
+          source_email_id: event.email_id,
+        }, context) as { id: string };
+        taskId = task.id;
+      }
+      await store.updateExtractedEvent(event.id, {
+        status: 'accepted',
+        ...(params.title ? { title: params.title } : {}),
+        ...(params.due_at !== undefined ? { due_at: params.due_at } : {}),
+        task_id: taskId,
+      });
     });
-    return { event: await store.getExtractedEvent(event.id) };
+    return { event: await store.getExtractedEvent(params.id) };
   },
 });
 
@@ -230,14 +252,16 @@ const dismiss_event = defineTool({
   sideEffect: 'write',
   paramsSchema: dismissEventParams,
   handler: async (context, params) => {
-    const event = await store.getExtractedEvent(params.id);
-    if (!event) throw new NotFoundError(`event ${params.id} not found`);
-    await store.updateExtractedEvent(event.id, { status: 'dismissed' });
-    if (event.task_id) {
-      const { callTool } = await import('./call');
-      await callTool('dismiss_task', { id: event.task_id }, context).catch(() => undefined);
-    }
-    return { event: await store.getExtractedEvent(event.id) };
+    await store.withTransaction(async () => {
+      const event = await store.getExtractedEvent(params.id);
+      if (!event) throw new NotFoundError(`event ${params.id} not found`);
+      if (event.task_id) {
+        const { callTool } = await import('./call');
+        await callTool('dismiss_task', { id: event.task_id }, context);
+      }
+      await store.updateExtractedEvent(event.id, { status: 'dismissed' });
+    });
+    return { event: await store.getExtractedEvent(params.id) };
   },
 });
 

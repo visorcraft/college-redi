@@ -16,6 +16,7 @@ export function makeTestEnv(overrides: Record<string, string> = {}): TestEnv {
   process.env.MONGRELDB_PASSPHRASE = 'unit-passphrase-0123456789abcd';
   process.env.SESSION_SECRET = 'unit-session-secret';
   process.env.SCHEDULER_ENABLED = 'false';
+  delete process.env.MONGRELDB_URL;
   delete process.env.REDI_MASTER_KEY;
   delete process.env.REDI_SETUP_TOKEN;
   delete process.env.TRUST_PROXY_HOPS;

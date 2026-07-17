@@ -20,8 +20,8 @@ export class FakeImapConnection implements ImapConnection {
     if (this.opts.failConnect) throw this.opts.failConnect;
   }
 
-  async getMailboxLock(path: string) {
-    this.calls.push(`getMailboxLock:${path}`);
+  async getMailboxLock(path: string, options?: { readOnly?: boolean }) {
+    this.calls.push(`getMailboxLock:${path}:${options?.readOnly ? 'readOnly' : 'readWrite'}`);
     return {
       mailbox: {
         uidvalidity: this.opts.uidvalidity,

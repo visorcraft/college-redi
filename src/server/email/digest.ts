@@ -11,19 +11,22 @@ export interface CollegeEmailDigestItem {
 const sqlString = (value: string): string => `'${value.replace(/'/g, "''")}'`;
 
 /** Return unsurfaced informational email, oldest first, capped at 50. */
-export async function collectCollegeEmailDigestItems(
-  opts: { markIncluded?: boolean } = {},
-): Promise<CollegeEmailDigestItem[]> {
-  const items = await rows<CollegeEmailDigestItem>(
+export async function collectCollegeEmailDigestItems(): Promise<CollegeEmailDigestItem[]> {
+  return rows<CollegeEmailDigestItem>(
     `SELECT id, subject, from_addr, summary, received_at FROM emails_processed
      WHERE classification = 'informational' AND notified = FALSE
      ORDER BY received_at ASC LIMIT 50`,
   );
-  if (opts.markIncluded && items.length > 0) {
-    const ids = items.map((item) => sqlString(item.id)).join(', ');
-    await exec(`UPDATE emails_processed SET notified = TRUE WHERE id IN (${ids})`);
-  }
-  return items;
+}
+
+export async function markCollegeEmailDigestItemsIncluded(
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return;
+  await exec(
+    `UPDATE emails_processed SET notified = TRUE WHERE id IN (` +
+    `${ids.map(sqlString).join(', ')})`,
+  );
 }
 
 export function renderCollegeEmailDigestSection(items: CollegeEmailDigestItem[]): string {

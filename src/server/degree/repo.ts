@@ -1,5 +1,4 @@
-import { tableFromIPC, type Table } from 'apache-arrow';
-import { getDb } from '../db/client';
+import { sqlRows, withSqlTransaction } from '../db/sql';
 import { ConflictError, NotFoundError } from '../tools/errors';
 import type { BucketRule } from '../../lib/schemas/degree';
 
@@ -19,26 +18,8 @@ export function lit(v: SqlValue): string {
   return `'${v.replace(/'/g, "''")}'`;
 }
 
-function normalize(v: unknown): unknown {
-  if (typeof v === 'bigint') return Number(v);
-  if (v instanceof Uint8Array) return new TextDecoder().decode(v);
-  if (Array.isArray(v)) return v.map(normalize);
-  if (v && typeof v === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, val] of Object.entries(v)) out[k] = normalize(val);
-    return out;
-  }
-  return v;
-}
-
 export async function sqlAll<T = Record<string, unknown>>(sql: string): Promise<T[]> {
-  const db = await getDb();
-  const out: unknown = await db.sql(sql);
-  if (!out || (out instanceof Uint8Array && out.byteLength === 0)) return [];
-  const table: Table = out instanceof Uint8Array ? tableFromIPC(out) : (out as Table);
-  const rows: T[] = [];
-  for (const row of table) rows.push(normalize({ ...(row as Record<string, unknown>) }) as T);
-  return rows;
+  return sqlRows<T>(sql);
 }
 export async function sqlOne<T = Record<string, unknown>>(sql: string): Promise<T | null> {
   return (await sqlAll<T>(sql))[0] ?? null;
@@ -46,15 +27,7 @@ export async function sqlOne<T = Record<string, unknown>>(sql: string): Promise<
 export async function sqlExec(sql: string): Promise<void> { await sqlAll(sql); }
 
 export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
-  await sqlExec('BEGIN');
-  try {
-    const out = await fn();
-    await sqlExec('COMMIT');
-    return out;
-  } catch (err) {
-    try { await sqlExec('ROLLBACK'); } catch { /* session already aborted */ }
-    throw err;
-  }
+  return withSqlTransaction(fn);
 }
 
 export async function insertRow(table: string, rec: Record<string, SqlValue>): Promise<void> {

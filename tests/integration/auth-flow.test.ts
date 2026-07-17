@@ -157,10 +157,16 @@ describe('auth flow (booted app, temp data dir)', () => {
     const locked = await fetch(`${srv.baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: PASSWORD }),
+      body: JSON.stringify({ password: 'still-wrong' }),
     });
     expect(locked.status).toBe(429);
     expect((await locked.json()).error.code).toBe('login_locked');
     expect(locked.headers.get('retry-after')).toBeTruthy();
+    const correct = await fetch(`${srv.baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: PASSWORD }),
+    });
+    expect(correct.status).toBe(200);
   });
 });

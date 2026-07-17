@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   applySecurityHeaders,
   _rateLimitBucketCountForTests,
+  clientKey,
   clientIp,
   csrfFailure,
   ensureCsrfCookie,
   isSecureRequest,
   rateLimitExceeded,
+  requestRateLimitExceeded,
 } from '../../src/server/security';
 
 function req(
@@ -149,5 +151,22 @@ describe('rate limiter', () => {
       headers: { 'x-forwarded-for': 'spoofed' },
     }))).toBeNull();
     expect(clientIp(req('http://localhost/'))).toBeNull();
+  });
+
+  it('uses one bounded direct key when no trusted address exists', () => {
+    const csrf = `csrf-${crypto.randomUUID()}`;
+    const direct = req('http://localhost/api/auth/login', {
+      cookies: { redi_csrf: csrf },
+    });
+    expect(clientKey(direct)).toBe('direct');
+    const scope = `direct-${crypto.randomUUID()}`;
+    for (let i = 0; i < 10; i += 1) {
+      const rotating = req('http://localhost/api/auth/login', {
+        cookies: { redi_csrf: `csrf-${crypto.randomUUID()}` },
+      });
+      expect(requestRateLimitExceeded(rotating, scope, 10, 60_000))
+        .toBe(false);
+    }
+    expect(requestRateLimitExceeded(direct, scope, 10, 60_000)).toBe(true);
   });
 });

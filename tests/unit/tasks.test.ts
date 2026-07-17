@@ -1,18 +1,24 @@
 import { NextRequest } from 'next/server';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanTables, setupTestDb, teardownTestDb } from '../helpers/p4';
 
 const CTX = { actor: 'test' };
 let callTool: (name: string, params: unknown, context: { actor: string }) => Promise<unknown>;
 let sqlRows: <T = Record<string, unknown>>(sql: string) => Promise<T[]>;
 let sqlExec: (sql: string) => Promise<void>;
+let withSqlTransaction: <T>(fn: () => Promise<T>) => Promise<T>;
+let updateSettings: (patch: Record<string, unknown>) => Promise<unknown>;
 
 beforeAll(async () => {
   await setupTestDb();
   ({ callTool } = await import('../../src/server/tools/call'));
-  ({ sqlRows, sqlExec } = await import('../../src/server/db/sql'));
+  ({ sqlRows, sqlExec, withSqlTransaction } = await import('../../src/server/db/sql'));
+  ({ updateSettings } = await import('../../src/server/settings'));
 });
-beforeEach(cleanTables);
+beforeEach(async () => {
+  await cleanTables();
+  await updateSettings({ timezone: 'UTC' });
+});
 afterAll(teardownTestDb);
 
 interface TaskDto {
@@ -36,6 +42,14 @@ describe('task tools', () => {
     expect(list.map((item) => item.id)).toEqual([task.id]);
   });
 
+  it('creates and returns a task inside an explicit transaction', async () => {
+    const task = await withSqlTransaction(() => create({ title: 'Transactional task' }));
+    expect(task).toMatchObject({ title: 'Transactional task', status: 'pending' });
+    expect(await sqlRows<{ id: string }>(
+      `SELECT id FROM tasks WHERE id = '${task.id}'`,
+    )).toEqual([{ id: task.id }]);
+  });
+
   it('list_tasks filters by status, category, and overdue date', async () => {
     await create({ title: 'A', category: 'vaccine', due_at: '2020-01-01T00:00:00.000Z' });
     await create({ title: 'B', category: 'housing', due_at: '2999-01-01T00:00:00.000Z' });
@@ -48,6 +62,20 @@ describe('task tools', () => {
     expect(done.map((task) => task.title)).toEqual(['C']);
     const overdue = await callTool('list_tasks', { due: 'overdue' }, CTX) as TaskDto[];
     expect(overdue.map((task) => task.title)).toEqual(['A']);
+  });
+
+  it('filters today using the configured timezone', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-09T04:30:00.000Z'));
+    try {
+      await updateSettings({ timezone: 'America/Chicago' });
+      await create({ title: 'Local today', due_at: '2026-03-09T04:45:00.000Z' });
+      await create({ title: 'Local tomorrow', due_at: '2026-03-09T05:30:00.000Z' });
+      const today = await callTool('list_tasks', { due: 'today' }, CTX) as TaskDto[];
+      expect(today.map((task) => task.title)).toEqual(['Local today']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('patches fields, clears due_at, and normalizes date-only deadlines', async () => {

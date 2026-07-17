@@ -135,6 +135,7 @@ describe('test_imap_connection', () => {
     const res: any = await tool('test_imap_connection').handler(ctx, {});
     expect(res).toEqual({ ok: true, mailbox: 'INBOX', unseen: 7 });
     expect(mocks.imapConnect).toHaveBeenCalledTimes(1);
+    expect(mocks.mailboxOpen).toHaveBeenCalledWith('INBOX', { readOnly: true });
     expect(mocks.imapLogout).toHaveBeenCalledTimes(1);
   });
 

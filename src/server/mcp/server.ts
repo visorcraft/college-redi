@@ -10,6 +10,24 @@ import { getAllTools } from '../tools/registry';
 
 export { verifyMcpToken } from '../tools/mcpTokens';
 
+const BLOCKED_TOOLS = new Set([
+  'update_settings',
+  'set_secret',
+  'create_mcp_token',
+  'list_mcp_tokens',
+  'revoke_mcp_token',
+  'send_test_notification',
+]);
+
+function isMcpTool(name: string): boolean {
+  return !BLOCKED_TOOLS.has(name)
+    && !(name.startsWith('test_') && name.endsWith('_connection'));
+}
+
+function mcpTools() {
+  return getAllTools().filter(({ name }) => isMcpTool(name));
+}
+
 function asArray(result: unknown, ...keys: string[]): unknown[] {
   if (Array.isArray(result)) return result;
   if (result && typeof result === 'object') {
@@ -77,7 +95,7 @@ export function buildMcpServer(actor: string): Server {
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: getAllTools().map((tool) => ({
+    tools: mcpTools().map((tool) => ({
       name: tool.name,
       description: tool.description,
       inputSchema: tool.jsonSchema as { type: 'object' } & Record<string, unknown>,
@@ -90,6 +108,9 @@ export function buildMcpServer(actor: string): Server {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
+      if (!mcpTools().some(({ name }) => name === request.params.name)) {
+        throw new Error(`Tool unavailable over MCP: ${request.params.name}`);
+      }
       const result = await callTool(
         request.params.name,
         request.params.arguments ?? {},

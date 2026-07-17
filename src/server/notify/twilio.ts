@@ -8,7 +8,9 @@ export async function sendTwilioSms(input: { to: string; body: string }): Promis
   if (!t?.enabled || !t.account_sid) throw new Error('twilio not configured');
   if (!t.from_number || !t.to_number) throw new Error('twilio numbers not configured');
   const authToken = await getSecret('twilio.auth_token');
-  const msg = await twilio(t.account_sid, authToken ?? '').messages.create({
+  const msg = await twilio(t.account_sid, authToken ?? '', {
+    timeout: 120_000,
+  }).messages.create({
     from: t.from_number,
     to: input.to,
     body: input.body,

@@ -10,6 +10,7 @@ import {
 } from '../../lib/schemas/tasks';
 import { lit, sqlExec, sqlRows } from '../db/sql';
 import { getSettings, updateSettings } from '../settings';
+import { zonedDayBounds } from '../time';
 import { NotFoundError } from './errors';
 import { defineTool, type Tool } from './registry';
 
@@ -63,14 +64,14 @@ async function listTasks(params: unknown) {
     );
   }
   if (parsed.due === 'today') {
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const end = new Date(start.getTime() + 86_400_000);
+    const { start, end } = zonedDayBounds(now, (await getSettings()).timezone);
     conditions.push(`due_at IS NOT NULL AND due_at >= ${lit(start)} AND due_at < ${lit(end)}`);
   }
   if (parsed.due === 'next_7_days') {
+    const { end } = zonedDayBounds(now, (await getSettings()).timezone, 7);
     conditions.push(
       `due_at IS NOT NULL AND due_at >= ${lit(now)} ` +
-      `AND due_at < ${lit(new Date(now.getTime() + 7 * 86_400_000))}`,
+      `AND due_at < ${lit(end)}`,
     );
   }
   const where = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
@@ -84,17 +85,30 @@ async function createTask(params: unknown) {
   const parsed = createTaskParamsSchema.parse(params);
   const now = new Date().toISOString();
   const id = randomUUID();
+  const row: TaskRow = {
+    id,
+    title: parsed.title,
+    description: parsed.description ?? null,
+    category: parsed.category,
+    status: 'pending',
+    due_at: parsed.due_at ? normalizeDueAt(parsed.due_at) : null,
+    reminder_policy: parsed.reminder_policy ? JSON.stringify(parsed.reminder_policy) : null,
+    source: parsed.source,
+    source_email_id: parsed.source_email_id ?? null,
+    created_at: now,
+    updated_at: now,
+    completed_at: null,
+  };
   await sqlExec(
     `INSERT INTO tasks (` +
     `id, title, description, category, status, due_at, reminder_policy, source, ` +
     `source_email_id, created_at, updated_at, completed_at` +
     `) VALUES (` +
-    `${lit(id)}, ${lit(parsed.title)}, ${lit(parsed.description ?? null)}, ${lit(parsed.category)}, ` +
-    `'pending', ${lit(parsed.due_at ? normalizeDueAt(parsed.due_at) : null)}, ` +
-    `${lit(parsed.reminder_policy ? JSON.stringify(parsed.reminder_policy) : null)}, ` +
-    `${lit(parsed.source)}, ${lit(parsed.source_email_id ?? null)}, ${lit(now)}, ${lit(now)}, NULL)`,
+    `${lit(row.id)}, ${lit(row.title)}, ${lit(row.description)}, ${lit(row.category)}, ` +
+    `${lit(row.status)}, ${lit(row.due_at)}, ${lit(row.reminder_policy)}, ` +
+    `${lit(row.source)}, ${lit(row.source_email_id)}, ${lit(row.created_at)}, ${lit(row.updated_at)}, NULL)`,
   );
-  return toDto(await getTaskRow(id));
+  return toDto(row);
 }
 
 async function updateTask(params: unknown) {

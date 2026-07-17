@@ -20,6 +20,7 @@ let callTool: (n: string, p: unknown, c: { actor: string }) => Promise<unknown>;
 let updateSettings: (p: Record<string, unknown>) => Promise<unknown>;
 let sqlRows: <T = Record<string, unknown>>(sql: string) => Promise<T[]>;
 let sqlExec: (sql: string) => Promise<void>;
+let time: typeof import('../../src/server/time');
 
 const notesOf = (type: string) =>
   sqlRows<{ title: string; importance: string }>(
@@ -33,6 +34,7 @@ beforeAll(async () => {
   ({ callTool } = await import('../../src/server/tools/call'));
   ({ updateSettings } = await import('../../src/server/settings'));
   ({ sqlRows, sqlExec } = await import('../../src/server/db/sql'));
+  time = await import('../../src/server/time');
 });
 beforeEach(async () => {
   await cleanTables();
@@ -72,6 +74,18 @@ describe('task reminders (spec §6.3, generated inside the per-minute dispatch t
     expect((await notesOf('task_reminder'))[0]).toMatchObject({ importance: 'low' });
     expect((await notesOf('task_reminder'))[0]?.title).toContain('Still waiting');
   });
+
+  it('enqueues one reminder when dispatches race', async () => {
+    await callTool('create_task', {
+      title: 'Pay tuition deposit', category: 'payment', due_at: '2026-08-21',
+    }, { actor: 'test' });
+    const results = await Promise.all([
+      jobs.enqueueDueTaskReminders(NOW),
+      jobs.enqueueDueTaskReminders(NOW),
+    ]);
+    expect(results.reduce((sum, result) => sum + result.enqueued, 0)).toBe(1);
+    expect(await notesOf('task_reminder')).toHaveLength(1);
+  });
 });
 
 describe('daily digest (spec §6.5.2)', () => {
@@ -104,6 +118,31 @@ describe('daily digest (spec §6.5.2)', () => {
     expect(rows[0]?.body).toContain('Due today thing');
     expect(rows[0]?.body).toContain('Next week thing');
     expect(rows[0]?.channels).toBe('["in_app","email"]');
+  });
+
+  it('uses the configured local day across the DST boundary', async () => {
+    const now = new Date('2026-03-08T12:00:00.000Z');
+    await updateSettings({
+      timezone: 'America/Chicago',
+      notification_prefs: { digest_enabled: true },
+      smtp: { enabled: true, host: 'smtp.example.com', personal_email: 'me@example.com' },
+    });
+    await callTool('create_task', {
+      title: 'Local Sunday',
+      due_at: '2026-03-09T04:30:00.000Z',
+    }, { actor: 'test' });
+    await callTool('create_task', {
+      title: 'Local Monday',
+      due_at: '2026-03-10T04:30:00.000Z',
+    }, { actor: 'test' });
+    await jobs.runDailyDigestJob(now);
+    const body = (await sqlRows<{ body: string }>(
+      `SELECT body FROM notifications WHERE type = 'digest'`,
+    ))[0]?.body ?? '';
+    expect(body).toContain('Your Redi digest for 2026-03-08');
+    expect(body.indexOf('Due today:')).toBeLessThan(body.indexOf('Local Sunday'));
+    expect(body.indexOf('Coming up this week:')).toBeLessThan(body.indexOf('Local Monday'));
+    expect(body).toContain('Local Monday — due 2026-03-09');
   });
 });
 
@@ -156,7 +195,7 @@ describe('scheduler registration (Appendix C) and job_leases (spec §3.4)', () =
 
   it('reads digest time and timezone on every tick', async () => {
     expect(await scheduler.runDailyDigestIfDue(
-      new Date('2026-08-20T12:30:00.000Z'),
+      new Date('2026-08-20T07:30:00.000Z'),
     )).toEqual({ skipped: true });
     await updateSettings({
       timezone: 'America/Chicago',
@@ -167,6 +206,19 @@ describe('scheduler registration (Appendix C) and job_leases (spec §3.4)', () =
     )).toMatchObject({ skipped: false });
   });
 
+  it('runs the digest at the first local tick after a DST-skipped target', async () => {
+    await updateSettings({
+      timezone: 'America/Chicago',
+      notification_prefs: { digest_time: '02:30' },
+    });
+    expect(await scheduler.runDailyDigestIfDue(
+      new Date('2026-03-08T08:00:00.000Z'),
+    )).toMatchObject({ skipped: false });
+    expect(await scheduler.runDailyDigestIfDue(
+      new Date('2026-03-08T09:00:00.000Z'),
+    )).toEqual({ skipped: true });
+  });
+
   it('withLease skips a job whose lease is still held and records last_status', async () => {
     const fn = vi.fn(async () => undefined);
     await scheduler.withLease('test_job', 3_600_000, fn);
@@ -175,5 +227,67 @@ describe('scheduler registration (Appendix C) and job_leases (spec §3.4)', () =
     expect((await sqlRows<{ last_status: string }>(
       `SELECT last_status FROM job_leases WHERE job_name = 'test_job'`,
     ))[0]?.last_status).toBe('ok');
+  });
+
+  it('heartbeats a running lease and fails safely after ownership loss', async () => {
+    let start!: () => void;
+    let finish!: () => void;
+    const started = new Promise<void>((resolve) => { start = resolve; });
+    const finished = new Promise<void>((resolve) => { finish = resolve; });
+    const running = scheduler.withLease('heartbeat-job', 3_000, async () => {
+      start();
+      await finished;
+    });
+    await started;
+    const initial = (await sqlRows<{ locked_until: string }>(
+      `SELECT locked_until FROM job_leases WHERE job_name = 'heartbeat-job'`,
+    ))[0]!.locked_until;
+    await vi.advanceTimersByTimeAsync(1_000);
+    const renewed = (await sqlRows<{ locked_until: string }>(
+      `SELECT locked_until FROM job_leases WHERE job_name = 'heartbeat-job'`,
+    ))[0]!.locked_until;
+    expect(renewed > initial).toBe(true);
+
+    await sqlExec(
+      `UPDATE job_leases SET last_status = 'running:replacement' ` +
+      `WHERE job_name = 'heartbeat-job'`,
+    );
+    await vi.advanceTimersByTimeAsync(1_000);
+    finish();
+    expect(await running).toEqual({
+      skipped: false,
+      error: 'scheduler lease lost: heartbeat-job',
+    });
+  });
+
+  it('exposes failures, releases their leases, and retries a failed digest', async () => {
+    const failed = await scheduler.withLease('bad-job', 3_600_000, async () => {
+      throw new Error('boom');
+    });
+    expect(failed).toEqual({ skipped: false, error: 'boom' });
+    expect(await scheduler.acquireJobLease('bad-job', 3_600_000)).toBe(true);
+
+    await updateSettings({ notification_prefs: { digest_time: '07:30' } });
+    await sqlExec(
+      `INSERT INTO job_leases (job_name, locked_until, last_run_at, last_status) VALUES (` +
+      `'daily_digest:2026-08-20', '2026-08-20T12:00:00.000Z', ` +
+      `'2026-08-20T12:00:00.000Z', 'error')`,
+    );
+    expect(await scheduler.runDailyDigestIfDue(
+      new Date('2026-08-20T12:31:00.000Z'),
+    )).toMatchObject({ skipped: false });
+  });
+
+  it('finds 23-hour and 25-hour local days', () => {
+    const spring = time.zonedDayBounds(
+      new Date('2026-03-08T12:00:00.000Z'),
+      'America/Chicago',
+    );
+    const fall = time.zonedDayBounds(
+      new Date('2026-11-01T12:00:00.000Z'),
+      'America/Chicago',
+    );
+    expect(spring.end.getTime() - spring.start.getTime()).toBe(23 * 60 * 60_000);
+    expect(fall.end.getTime() - fall.start.getTime()).toBe(25 * 60 * 60_000);
   });
 });

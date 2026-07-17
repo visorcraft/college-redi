@@ -15,6 +15,10 @@ export async function sendSmtpMail(input: {
     host: smtp.host,
     port: smtp.port ?? 465,
     secure: (smtp.security ?? 'tls') === 'tls',
+    requireTLS: smtp.security === 'starttls',
+    connectionTimeout: 30_000,
+    greetingTimeout: 30_000,
+    socketTimeout: 120_000,
     auth: smtp.username ? { user: smtp.username, pass: password ?? '' } : undefined,
   });
   const info = await transporter.sendMail({

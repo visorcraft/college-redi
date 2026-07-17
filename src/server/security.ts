@@ -131,6 +131,24 @@ export function clientIp(
   return chain[Math.max(0, chain.length - trustedProxyHops)] ?? direct ?? null;
 }
 
+export function clientKey(request: NextRequest): string | null {
+  const ip = clientIp(request);
+  return ip ? `ip:${ip}` : 'direct';
+}
+
+export function requestRateLimitExceeded(
+  request: NextRequest,
+  scope: string,
+  limit: number,
+  windowMs: number,
+): boolean {
+  const ip = clientIp(request);
+  const key = ip ? `ip:${ip}` : clientKey(request) ?? 'unattributed';
+  if (rateLimitExceeded(`${scope}:${key}`, limit, windowMs)) return true;
+  return ip === null
+    && rateLimitExceeded(`${scope}:unattributed-global`, limit * 10, windowMs);
+}
+
 export function isSecureRequest(request: NextRequest): boolean {
   if (request.nextUrl.protocol === 'https:') return true;
   const trustedProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);

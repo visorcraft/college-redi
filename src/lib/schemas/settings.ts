@@ -9,6 +9,14 @@ export const TaskCategorySchema = z.enum([
 ]);
 
 const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM, e.g. 22:00');
+const timeZone = z.string().min(1).refine((value) => {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}, 'Use a valid IANA timezone, e.g. America/Chicago');
 
 export const QuietHoursSchema = z.object({
   start: timeOfDay.default('22:00'),
@@ -103,7 +111,7 @@ export const DegreeProfileSchema = z.object({
 });
 
 export const SettingsPatchSchema = z.object({
-  timezone: z.string().min(1).optional(),
+  timezone: timeZone.optional(),
   quiet_hours: QuietHoursSchema.optional(),
   notification_prefs: NotificationPrefsSchema.optional(),
   ai: AiSettingsSchema.partial().optional(),
@@ -161,7 +169,7 @@ const StoredAiSettingsSchema = z.object({
 });
 
 export const AppSettingsSchema = z.object({
-  timezone: z.string().default('UTC'),
+  timezone: timeZone.default('UTC'),
   quiet_hours: QuietHoursSchema.default({ start: '22:00', end: '08:00' }),
   notification_prefs: NotificationPrefsSchema.default({
     urgent: [...DefaultChannelMap.urgent],

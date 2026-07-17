@@ -89,4 +89,76 @@ describe('settings & system tools', () => {
     expect(status.scheduler).toMatchObject({ enabled: false, alive: false });
     expect(status.notifications).toMatchObject({ pending: 0 });
   });
+
+  it('search_all finds tasks, courses, emails, and notifications without case sensitivity', async () => {
+    registerAllTools();
+    const program = await callTool('create_program', {
+      name: 'Biology',
+      institution: 'State University',
+      total_credits_required: 120,
+    }, ctx) as { id: string };
+    await callTool('add_course', {
+      program_id: program.id,
+      code: 'BIO 101',
+      title: 'Biology Foundations',
+      credits: 4,
+    }, ctx);
+    const task = await callTool('create_task', {
+      title: 'Biology advising form',
+      category: 'payment',
+    }, ctx) as { id: string };
+    const { insertProcessedEmail } = await import('@/server/email/store');
+    const emailId = await insertProcessedEmail({
+      mailbox: 'INBOX',
+      uid: 1,
+      uidvalidity: 1,
+      message_id: '<biology@example.edu>',
+      from_addr: 'advisor@example.edu',
+      subject: 'Biology department update',
+      received_at: new Date().toISOString(),
+      classification: 'informational',
+      summary: 'Biology office hours changed.',
+      extracted_count: 0,
+      notified: false,
+      processed_at: new Date().toISOString(),
+    });
+    const notification = await callTool('schedule_notification', {
+      title: 'Biology reminder',
+      body: 'Review biology plan.',
+      scheduled_for: new Date().toISOString(),
+    }, ctx) as { id: string };
+
+    const found = await callTool('search_all', {
+      query: 'BIOLOGY',
+    }, ctx) as { results: Array<{ kind: string }>; total: number };
+    expect(new Set(found.results.map((row) => row.kind)))
+      .toEqual(new Set(['task', 'course', 'email', 'notification']));
+    expect(found.total).toBe(4);
+
+    const selectedFields = [
+      ['payment', 'task', task.id],
+      ['informational', 'email', emailId],
+    ] as const;
+    for (const [query, kind, id] of selectedFields) {
+      const result = await callTool('search_all', { query }, ctx) as {
+        results: Array<{ kind: string; id: string }>;
+      };
+      expect(result.results).toContainEqual(expect.objectContaining({ kind, id }));
+    }
+
+    const { sqlExec } = await import('@/server/db/sql');
+    await sqlExec(
+      `UPDATE notifications SET type = 'deadline_marker', status = 'failed' ` +
+      `WHERE id = '${notification.id}'`,
+    );
+    for (const query of ['deadline_marker', 'failed']) {
+      const result = await callTool('search_all', { query }, ctx) as {
+        results: Array<{ kind: string; id: string }>;
+      };
+      expect(result.results).toContainEqual(expect.objectContaining({
+        kind: 'notification',
+        id: notification.id,
+      }));
+    }
+  });
 });

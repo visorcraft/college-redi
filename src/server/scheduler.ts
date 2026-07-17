@@ -19,10 +19,12 @@ export async function startScheduler(): Promise<void> {
   alive = true;
   tasks.push(
     cron.schedule('* * * * *', () => {
-      void withLease('notification_dispatch', 55_000, () => runNotificationDispatchJob());
+      void withLease('notification_dispatch', 55_000, (signal) =>
+        runNotificationDispatchJob(new Date(), signal));
     }),
     cron.schedule('7 * * * *', () => {
-      void withLease('registration_sweep', 10 * 60_000, () => runRegistrationSweepJob());
+      void withLease('registration_sweep', 10 * 60_000, (signal) =>
+        runRegistrationSweepJob(new Date(), signal));
     }),
     cron.schedule('* * * * *', () => {
       void runDailyDigestIfDue();
@@ -87,33 +89,129 @@ export function acquireJobLeaseToken(
   return pending;
 }
 
+export async function renewJobLease(
+  jobName: string,
+  owner: string,
+  ttlMs: number,
+  now = new Date(),
+): Promise<boolean> {
+  const lockedUntil = new Date(now.getTime() + ttlMs).toISOString();
+  await sqlExec(
+    `UPDATE job_leases SET locked_until = ${lit(lockedUntil)} ` +
+    `WHERE job_name = ${lit(jobName)} AND last_status = ${lit(owner)}`,
+  );
+  const current = (await sqlRows<{ last_status: string; locked_until: string }>(
+    `SELECT last_status, locked_until FROM job_leases WHERE job_name = ${lit(jobName)}`,
+  ))[0];
+  return current?.last_status === owner && current.locked_until === lockedUntil;
+}
+
+async function ownsJobLease(
+  jobName: string,
+  owner: string,
+  now = new Date(),
+): Promise<boolean> {
+  const current = (await sqlRows<{ last_status: string; locked_until: string | null }>(
+    `SELECT last_status, locked_until FROM job_leases WHERE job_name = ${lit(jobName)}`,
+  ))[0];
+  return current?.last_status === owner
+    && current.locked_until !== null
+    && current.locked_until > now.toISOString();
+}
+
+export function keepJobLeaseAlive(
+  jobName: string,
+  owner: string,
+  ttlMs: number,
+  onLost?: (error: Error) => void,
+): () => void {
+  let renewing = false;
+  let stopped = false;
+  const lost = (error: Error) => {
+    if (stopped) return;
+    stopped = true;
+    clearInterval(timer);
+    onLost?.(error);
+  };
+  const timer = setInterval(() => {
+    if (renewing || stopped) return;
+    renewing = true;
+    void renewJobLease(jobName, owner, ttlMs)
+      .then((renewed) => {
+        if (!renewed && !stopped) {
+          console.error(JSON.stringify({
+            level: 'error',
+            msg: 'scheduler lease heartbeat lost ownership',
+            job: jobName,
+          }));
+          lost(new Error(`scheduler lease lost: ${jobName}`));
+        }
+      })
+      .catch((error) => {
+        if (stopped) return;
+        const failure = error instanceof Error ? error : new Error(String(error));
+        console.error(JSON.stringify({
+          level: 'error',
+          msg: 'scheduler lease heartbeat failed',
+          job: jobName,
+          error: failure.message,
+        }));
+        lost(failure);
+      })
+      .finally(() => {
+        renewing = false;
+      });
+  }, Math.max(1_000, Math.floor(ttlMs / 3)));
+  timer.unref();
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
+}
+
 export async function withLease<T>(
   jobName: string,
   leaseMs: number,
-  fn: () => Promise<T>,
-): Promise<{ skipped: true } | { skipped: false; result?: T }> {
+  fn: (signal: AbortSignal) => Promise<T>,
+): Promise<
+  { skipped: true }
+  | { skipped: false; result: T }
+  | { skipped: false; error: string }
+> {
   const owner = await acquireJobLeaseToken(jobName, leaseMs);
   if (!owner) return { skipped: true };
+  const controller = new AbortController();
+  const stopHeartbeat = keepJobLeaseAlive(
+    jobName,
+    owner,
+    leaseMs,
+    (error) => controller.abort(error),
+  );
   try {
-    const result = await fn();
+    const result = await fn(controller.signal);
+    controller.signal.throwIfAborted();
+    stopHeartbeat();
+    if (!(await ownsJobLease(jobName, owner))) {
+      throw new Error(`scheduler lease lost: ${jobName}`);
+    }
     await sqlExec(
       `UPDATE job_leases SET last_status = 'ok' ` +
       `WHERE job_name = ${lit(jobName)} AND last_status = ${lit(owner)}`,
     );
     return { skipped: false, result };
   } catch (err) {
-    await sqlExec(
-      `UPDATE job_leases SET last_status = 'error' ` +
-      `WHERE job_name = ${lit(jobName)} AND last_status = ${lit(owner)}`,
-    );
+    const error = err instanceof Error ? err.message : String(err);
+    await releaseJobLease(jobName, 'error', new Date(), owner);
     console.error(JSON.stringify({
       level: 'error',
       msg: 'scheduler job failed',
       job: jobName,
-      error: err instanceof Error ? err.message : String(err),
+      error,
       stack: err instanceof Error ? err.stack : undefined,
     }));
-    return { skipped: false };
+    return { skipped: false, error };
+  } finally {
+    stopHeartbeat();
   }
 }
 
@@ -149,11 +247,17 @@ export async function runDailyDigestIfDue(now = new Date()) {
   const configured = settings.notification_prefs?.digest_time ?? '08:00';
   const target = /^\d{2}:\d{2}$/.test(configured) ? configured : '08:00';
   const local = localDateTime(now, settings.timezone ?? 'UTC');
-  if (local.time !== target) return { skipped: true as const };
+  const jobName = `daily_digest:${local.date}`;
+  const status = (await sqlRows<{ last_status: string }>(
+    `SELECT last_status FROM job_leases WHERE job_name = ${lit(jobName)}`,
+  ))[0]?.last_status;
+  if (status === 'ok' || (local.time < target && status !== 'error')) {
+    return { skipped: true as const };
+  }
   return withLease(
-    `daily_digest:${local.date}`,
-    26 * 60 * 60_000,
-    () => runDailyDigestJob(now),
+    jobName,
+    10 * 60_000,
+    (signal) => runDailyDigestJob(now, signal),
   );
 }
 
