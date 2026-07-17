@@ -4,6 +4,7 @@ import { getSettings } from '@/server/settings';
 import SetupBanners from '@/components/dashboard/SetupBanners';
 import { TodayCard } from '@/components/ui/TodayCard';
 import CollegeInboxCard from '@/components/email/CollegeInboxCard';
+import RediOneLiner from '@/components/redi/RediOneLiner';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,7 @@ export default async function DashboardPage() {
           </button>
         </form>
       </header>
+      <RediOneLiner />
       <TodayCard />
       <CollegeInboxCard />
       <section className="rounded-2xl bg-white p-6 shadow-sm">

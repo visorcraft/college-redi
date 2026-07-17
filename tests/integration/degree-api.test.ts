@@ -6,8 +6,9 @@ process.env.DATABASE_MODE = 'embedded';
 process.env.MONGRELDB_PASSPHRASE = 'test-passphrase';
 process.env.MONGRELDB_DB_USERNAME = 'redi';
 process.env.MONGRELDB_DB_PASSWORD = 'test-password';
+const dataDir = process.env.DATA_DIR;
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 type Route = Partial<Record<'GET' | 'POST' | 'PATCH' | 'DELETE', (...args: any[]) => Promise<Response>>>;
 const routes: Record<string, Route> = {};
@@ -16,6 +17,17 @@ const json = (method: string, body: unknown, url = 'http://test/api/x') =>
   new Request(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 beforeAll(async () => {
+  const { _resetDbForTests } = await import('../../src/server/db/client');
+  const { _resetConfigForTests } = await import('../../src/server/config');
+  const { _resetRegistryForTests } = await import('../../src/server/tools/registry');
+  const { _resetToolsForTests } = await import('../../src/server/tools');
+  _resetDbForTests();
+  _resetConfigForTests();
+  _resetRegistryForTests();
+  _resetToolsForTests();
+  process.env.DATA_DIR = dataDir;
+  delete process.env.MONGRELDB_PATH;
+  vi.resetModules();
   const { runMigrations } = await import('../../src/server/db/migrate');
   const { registerAllTools } = await import('../../src/server/tools');
   await runMigrations();
@@ -33,6 +45,11 @@ beforeAll(async () => {
   routes.planned = await import('../../src/app/api/planned-courses/route');
   routes.plannedOne = await import('../../src/app/api/planned-courses/[id]/route');
   routes.progress = await import('../../src/app/api/progress/route');
+});
+
+afterAll(async () => {
+  const { _resetDbForTests } = await import('../../src/server/db/client');
+  _resetDbForTests();
 });
 
 describe('programs CRUD + error envelope', () => {

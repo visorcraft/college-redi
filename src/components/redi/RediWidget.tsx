@@ -1,47 +1,118 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { RediCloud } from './RediCloud';
 import { ChatBubble } from './ChatBubble';
-import { getWidgetState, getTooltip, SLEEPY_MESSAGE } from './widgetState';
+import { rediStatusLine } from './rediText';
+import { deriveRediState, type RediState } from './widgetState';
+
+interface StatusPayload {
+  aiConfigured: boolean;
+  unreadCount: number;
+  jobRunning: boolean;
+}
+
+const CELEBRATION_MS = 3_000;
+const POLL_MS = 30_000;
+
+const moodByState = {
+  sleepy: 'sleepy',
+  idle: 'idle',
+  thinking: 'idle',
+  alert: 'sad',
+  celebrating: 'happy',
+} as const satisfies Record<RediState, 'sleepy' | 'idle' | 'happy' | 'sad'>;
 
 export function RediWidget({ aiConfigured }: { aiConfigured: boolean }) {
-  const state = getWidgetState({ aiConfigured });
   const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<StatusPayload>({
+    aiConfigured,
+    unreadCount: 0,
+    jobRunning: false,
+  });
+  const [chatBusy, setChatBusy] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
+  const celebrationTimer = useRef<number | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch('/api/redi/status', { cache: 'no-store' });
+      if (response.ok) setStatus(await response.json() as StatusPayload);
+    } catch {
+      // Keep the last known status.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), POLL_MS);
+    const onFocus = () => void refresh();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    const onCelebrate = () => {
+      if (celebrationTimer.current) {
+        window.clearTimeout(celebrationTimer.current);
+      }
+      setCelebrating(true);
+      celebrationTimer.current = window.setTimeout(
+        () => setCelebrating(false),
+        CELEBRATION_MS,
+      );
+    };
+    window.addEventListener('redi:celebrate', onCelebrate);
+    return () => {
+      window.removeEventListener('redi:celebrate', onCelebrate);
+      if (celebrationTimer.current) {
+        window.clearTimeout(celebrationTimer.current);
+      }
+    };
+  }, []);
+
+  const input = { ...status, chatBusy, celebrating };
+  const state = deriveRediState(input);
+  const statusLine = rediStatusLine(input);
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
-      {open && (
-        <ChatBubble onClose={() => setOpen(false)}>
-          {state === 'sleepy' ? (
-            <div className="flex flex-col gap-3">
-              <p>{SLEEPY_MESSAGE}</p>
-              <Link href="/settings/ai" onClick={() => setOpen(false)}
-                className="rounded-xl bg-[#1F2D50] px-4 py-2 text-center text-sm font-medium text-white">
-                Set up AI
-              </Link>
-            </div>
-          ) : (
-            // PHASE 6: replace this static note with the live chat UI
-            // (conversation list, messages, streaming input — see spec §6.6).
-            <p className="text-[#1F2D50]/70">
-              Chat with Redi arrives in a later phase — this bubble will come alive then.
-            </p>
+    <>
+      <button
+        type="button"
+        aria-label={statusLine}
+        aria-expanded={open}
+        title={statusLine}
+        onClick={() => setOpen((value) => !value)}
+        className="fixed bottom-6 right-6 z-50 rounded-full p-1 transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#FFC24B] motion-reduce:transition-none"
+      >
+        <span className="relative block" aria-hidden="true">
+          <RediCloud mood={moodByState[state]} size={64} />
+          {state === 'alert' && status.unreadCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FFC24B] px-1 text-[11px] font-bold text-[#1F2D50]">
+              {status.unreadCount > 99 ? '99+' : status.unreadCount}
+            </span>
           )}
-        </ChatBubble>
-      )}
-      <div className="group relative">
-        <span aria-hidden="true"
-          className="pointer-events-none absolute bottom-full right-0 mb-2 hidden whitespace-nowrap rounded-xl bg-[#1F2D50] px-3 py-1 text-xs text-white group-hover:block">
-          {getTooltip(state)}
+          {state === 'celebrating' && (
+            <span className="absolute -left-2 -top-2 motion-reduce:hidden">
+              🎉
+            </span>
+          )}
         </span>
-        <button type="button" onClick={() => setOpen((v) => !v)}
-          aria-label={open ? 'Close Redi' : 'Talk to Redi'} aria-expanded={open}
-          className="rounded-full p-1 focus:outline-none focus:ring-2 focus:ring-[#FFC24B]">
-          <RediCloud mood={state === 'sleepy' ? 'sleepy' : 'idle'} size={64} />
-        </button>
-      </div>
-    </div>
+      </button>
+      <ChatBubble
+        open={open}
+        aiConfigured={status.aiConfigured}
+        onClose={() => setOpen(false)}
+        onBusyChange={setChatBusy}
+      />
+    </>
   );
 }
