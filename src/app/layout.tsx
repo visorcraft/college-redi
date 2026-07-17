@@ -3,6 +3,7 @@ import './globals.css';
 import { RediWidget } from '@/components/redi/RediWidget';
 import { getSettings } from '@/server/settings';
 import { getSecret } from '@/server/secrets';
+import { NotificationBell } from '@/components/ui/NotificationBell';
 
 export const metadata: Metadata = {
   title: 'Redi',
@@ -20,6 +21,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en">
       <body className="min-h-screen antialiased">
         {children}
+        <NotificationBell />
         <RediWidget aiConfigured={aiConfigured} />
       </body>
     </html>
