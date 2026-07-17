@@ -1,0 +1,9 @@
+services:
+  redi:
+    build: .
+    image: redi:local
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./redi-data:/data
+    restart: unless-stopped

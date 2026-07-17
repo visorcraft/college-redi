@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --redi-sky: #EAF3FB;
+  --redi-navy: #1F2D50;
+  --redi-navy-light: #2E416E;
+  --redi-accent: #FFC24B;
+}
+
+body {
+  background: var(--redi-sky);
+  color: var(--redi-navy);
+}
