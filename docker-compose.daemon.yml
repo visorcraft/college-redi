@@ -28,6 +28,7 @@ services:
       DATABASE_MODE: remote
       MONGRELDB_URL: http://127.0.0.1:8453
       PORT: "3000"
+      HOSTNAME: 127.0.0.1
     volumes:
       - ./redi-data/app:/data
     depends_on: [mongreldb]
@@ -62,7 +63,7 @@ services:
 #       MONGRELDB_URL: http://mongreldb:8453
 #       PORT: "3000"
 #     ports:
-#       - "3000:3000"
+#       - "127.0.0.1:3000:3000"
 #     volumes:
 #       - ./redi-data/app:/data
 #     depends_on: [mongreldb-proxy]

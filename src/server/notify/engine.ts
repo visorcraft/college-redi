@@ -137,6 +137,18 @@ const DELIVERY_IN_FLIGHT = '{"delivery":"in_flight"}';
 const DELIVERY_UNKNOWN = '{"delivery":"unknown"}';
 
 type ChannelState = 'sent' | 'exhausted' | 'unknown' | 'awaiting_retry' | 'ready';
+type DeliveryMarker = 'reserved' | 'in_flight' | 'unknown';
+
+function deliveryMarker(response: string | null): DeliveryMarker | null {
+  try {
+    const marker = JSON.parse(response ?? '{}').delivery;
+    return marker === 'reserved' || marker === 'in_flight' || marker === 'unknown'
+      ? marker
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 async function channelState(
   notificationId: string,
@@ -146,22 +158,23 @@ async function channelState(
   const rows = await sqlRows<HistoryRow>(
     `SELECT id, status, provider_response, attempt, sent_at FROM notification_history WHERE notification_id = ${lit(notificationId)} AND channel = ${lit(channel)} ORDER BY attempt ASC, sent_at ASC, id ASC`,
   );
-  const attempts = rows.filter((r) => r.provider_response !== DELIVERY_RESERVED).length;
+  const attempts = rows.filter((r) => deliveryMarker(r.provider_response) !== 'reserved').length;
   if (rows.some((r) => r.status === 'sent')) return { state: 'sent', attempts };
   const latest = rows.at(-1);
-  if (latest?.provider_response === DELIVERY_RESERVED) {
-    return { state: 'ready', attempts, reservationId: latest.id };
+  const marker = deliveryMarker(latest?.provider_response ?? null);
+  if (marker === 'reserved') {
+    return { state: 'ready', attempts, reservationId: latest!.id };
   }
-  if (latest?.provider_response === DELIVERY_UNKNOWN) {
+  if (marker === 'unknown') {
     return { state: 'unknown', attempts };
   }
-  if (latest?.provider_response === DELIVERY_IN_FLIGHT) {
-    return now.getTime() - new Date(latest.sent_at).getTime() >= CHANNEL_CLAIM_MS
+  if (marker === 'in_flight') {
+    return now.getTime() - new Date(latest!.sent_at).getTime() >= CHANNEL_CLAIM_MS
       ? { state: 'unknown', attempts }
       : { state: 'awaiting_retry', attempts };
   }
   const failed = rows.filter((r) =>
-    r.status === 'failed' && r.provider_response !== DELIVERY_RESERVED);
+    r.status === 'failed' && deliveryMarker(r.provider_response) !== 'reserved');
   if (failed.length >= MAX_FAILED_ATTEMPTS) return { state: 'exhausted', attempts };
   if (failed.length === 0) return { state: 'ready', attempts: 0 };
   const lastFailedAt = new Date(failed[failed.length - 1]!.sent_at).getTime();
@@ -175,6 +188,25 @@ const destinationFor = (channel: NotificationChannel, s: EngineSettings) =>
   channel === 'in_app' ? 'in_app'
     : channel === 'email' ? s.smtp?.personal_email ?? ''
       : s.twilio?.to_number ?? '';
+
+function definitelyNotDelivered(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const detail = error as { code?: unknown; responseCode?: unknown; status?: unknown };
+  const responseCode = Number(detail.responseCode);
+  const status = Number(detail.status);
+  return (Number.isInteger(responseCode) && responseCode >= 400)
+    || (Number.isInteger(status) && status >= 400 && status < 500)
+    || [
+      'EAUTH', 'EENVELOPE', 'EMESSAGE', 'ECONNECTION', 'ECONNREFUSED',
+      'EHOSTUNREACH', 'ENETUNREACH', 'ENOTFOUND', 'EAI_AGAIN',
+    ].includes(String(detail.code ?? ''));
+}
+
+async function notificationStatus(id: string): Promise<string | null> {
+  return (await sqlRows<{ status: string }>(
+    `SELECT status FROM notifications WHERE id = ${lit(id)} LIMIT 1`,
+  ))[0]?.status ?? null;
+}
 
 async function deliver(
   channel: NotificationChannel,
@@ -208,7 +240,7 @@ export async function dispatchDueNotifications(
   for (const n of due) {
     signal?.throwIfAborted();
     if (n.importance !== 'urgent' && isInQuietHours(now, quiet, tz)) {
-      await sqlExec(`UPDATE notifications SET scheduled_for = ${lit(quietHoursEnd(now, quiet, tz))} WHERE id = ${lit(n.id)}`);
+      await sqlExec(`UPDATE notifications SET scheduled_for = ${lit(quietHoursEnd(now, quiet, tz))} WHERE id = ${lit(n.id)} AND status = 'pending'`);
       summary.held += 1;
       continue;
     }
@@ -236,7 +268,7 @@ export async function dispatchDueNotifications(
       );
       try {
         const claimed = await channelState(n.id, channel, now);
-        if (claimed.state === 'ready') {
+        if (claimed.state === 'ready' && await notificationStatus(n.id) === 'pending') {
           signal?.throwIfAborted();
           if (channelLeaseLost) throw new Error(`notification channel lease lost: ${claimName}`);
           const historyId = claimed.reservationId ?? randomUUID();
@@ -249,12 +281,22 @@ export async function dispatchDueNotifications(
             `attempt = ${attempt}, sent_at = ${lit(new Date())} ` +
             `WHERE id = ${lit(historyId)}`,
           );
+          if (await notificationStatus(n.id) !== 'pending') {
+            await sqlExec(
+              `UPDATE notification_history SET provider_response = '{"delivery":"cancelled"}' ` +
+              `WHERE id = ${lit(historyId)}`,
+            );
+            continue;
+          }
           let status: 'sent' | 'failed' = 'sent';
           let provider: Record<string, unknown>;
           try {
             provider = await deliver(channel, n, settings);
           } catch (err) {
-            provider = { error: err instanceof Error ? err.message : String(err) };
+            const error = err instanceof Error ? err.message : String(err);
+            provider = definitelyNotDelivered(err)
+              ? { error }
+              : { delivery: 'unknown', error };
             status = 'failed';
           }
           await sqlExec(
@@ -269,23 +311,35 @@ export async function dispatchDueNotifications(
       if (channelLeaseLost) throw new Error(`notification channel lease lost: ${claimName}`);
       signal?.throwIfAborted();
     }
+    if (await notificationStatus(n.id) !== 'pending') continue;
     const states = await Promise.all(channels.map((c) => channelState(n.id, c, now)));
     for (let index = 0; index < channels.length; index += 1) {
       if (states[index]?.state === 'unknown') {
-        await sqlExec(
-          `UPDATE notification_history SET provider_response = ${lit(DELIVERY_UNKNOWN)} ` +
-          `WHERE notification_id = ${lit(n.id)} AND channel = ${lit(channels[index]!)} ` +
-          `AND provider_response = ${lit(DELIVERY_IN_FLIGHT)}`,
-        );
+        const scheduler = await import('../scheduler');
+        const claimName = `notification:${n.id}:${channels[index]!}`;
+        const owner = await scheduler.acquireJobLeaseToken(claimName, CHANNEL_CLAIM_MS, new Date());
+        if (!owner) {
+          states[index] = { ...states[index]!, state: 'awaiting_retry' };
+          continue;
+        }
+        try {
+          await sqlExec(
+            `UPDATE notification_history SET provider_response = ${lit(DELIVERY_UNKNOWN)} ` +
+            `WHERE notification_id = ${lit(n.id)} AND channel = ${lit(channels[index]!)} ` +
+            `AND provider_response = ${lit(DELIVERY_IN_FLIGHT)}`,
+          );
+        } finally {
+          await scheduler.releaseJobLease(claimName, 'ok', new Date(), owner);
+        }
       }
     }
     if (states.every((s) => s.state === 'sent')) {
-      await sqlExec(`UPDATE notifications SET status = 'sent', sent_at = ${lit(now)} WHERE id = ${lit(n.id)}`);
-      summary.sent += 1;
+      await sqlExec(`UPDATE notifications SET status = 'sent', sent_at = ${lit(now)} WHERE id = ${lit(n.id)} AND status = 'pending'`);
+      if (await notificationStatus(n.id) === 'sent') summary.sent += 1;
     } else if (states.every((s) =>
       s.state === 'sent' || s.state === 'exhausted' || s.state === 'unknown')) {
-      await sqlExec(`UPDATE notifications SET status = 'failed' WHERE id = ${lit(n.id)}`);
-      summary.failed += 1;
+      await sqlExec(`UPDATE notifications SET status = 'failed' WHERE id = ${lit(n.id)} AND status = 'pending'`);
+      if (await notificationStatus(n.id) === 'failed') summary.failed += 1;
     } else {
       summary.awaiting_retry += 1;
     }

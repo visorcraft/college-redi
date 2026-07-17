@@ -69,7 +69,9 @@ describe('dispatchDueNotifications (spec §6.5.2)', () => {
     vi.useFakeTimers();
     vi.setSystemTime(T0);
     try {
-      mocks.sendMail.mockRejectedValueOnce(new Error('smtp down'));
+      mocks.sendMail.mockRejectedValueOnce(
+        Object.assign(new Error('smtp unavailable'), { code: 'ECONNREFUSED' }),
+      );
       const id = await engine.enqueueNotification({
         type: 'system', title: 'Hi', body: 'b', importance: 'normal', scheduledFor: T0,
       });
@@ -88,11 +90,36 @@ describe('dispatchDueNotifications (spec §6.5.2)', () => {
     }
   });
 
+  it('does not retry an ambiguous provider timeout', async () => {
+    mocks.sendMail.mockRejectedValueOnce(new Error('socket timed out'));
+    const id = await engine.enqueueNotification({
+      type: 'system',
+      title: 'Hi',
+      body: 'b',
+      importance: 'normal',
+      channels: ['email'],
+      scheduledFor: T0,
+    });
+    expect((await engine.dispatchDueNotifications(T0)).failed).toBe(1);
+    expect((await engine.dispatchDueNotifications(
+      new Date(T0.getTime() + 2 * 60_000),
+    )).due).toBe(0);
+    expect(mocks.sendMail).toHaveBeenCalledOnce();
+    expect(JSON.parse((await sqlRows<{ provider_response: string }>(
+      `SELECT provider_response FROM notification_history WHERE notification_id = '${id}'`,
+    ))[0]!.provider_response)).toMatchObject({
+      delivery: 'unknown',
+      error: 'socket timed out',
+    });
+  });
+
   it('marks failed after the initial attempt plus 3 retries (1m/15m/1h) all fail', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(T0);
     try {
-      mocks.sendMail.mockRejectedValue(new Error('smtp down'));
+      mocks.sendMail.mockRejectedValue(
+        Object.assign(new Error('smtp rejected'), { responseCode: 451 }),
+      );
       const id = await engine.enqueueNotification({
         type: 'system',
         title: 'Hi',
@@ -118,6 +145,33 @@ describe('dispatchDueNotifications (spec §6.5.2)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('does not deliver or overwrite a notification cancelled during dispatch', async () => {
+    const id = await engine.enqueueNotification({
+      type: 'task_reminder',
+      title: 'Hi',
+      body: 'b',
+      importance: 'normal',
+      channels: ['email'],
+      scheduledFor: T0,
+      relatedType: 'task',
+      relatedId: 'task-1',
+    });
+    const original = dbSql.sqlExec;
+    const exec = vi.spyOn(dbSql, 'sqlExec').mockImplementation(async (sql) => {
+      await original(sql);
+      if (sql.includes('{"delivery":"in_flight"}')) {
+        await original(`UPDATE notifications SET status = 'cancelled' WHERE id = '${id}'`);
+      }
+    });
+    await engine.dispatchDueNotifications(T0);
+    exec.mockRestore();
+
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+    expect((await sqlRows<{ status: string }>(
+      `SELECT status FROM notifications WHERE id = '${id}'`,
+    ))[0]?.status).toBe('cancelled');
   });
 
   it('holds non-urgent deliveries inside quiet hours and flushes them at quiet end', async () => {

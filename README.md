@@ -31,7 +31,8 @@ podman compose up -d --build
 podman compose exec redi sed -n 's/^REDI_SETUP_TOKEN=//p' /data/.env
 ```
 
-The locally built all-in-one image uses embedded MongrelDB. The included
+The locally built all-in-one image uses embedded MongrelDB and publishes Redi
+only on `127.0.0.1:3000`. The included
 `docker-compose.yml` also works with `podman-compose`. The `compose exec`
 command reads the setup token inside the root-owned container because the
 host copy at `./redi-data/.env` has mode `0600`.
@@ -135,7 +136,7 @@ There is no in-app backup machinery in v1.
 - Application secrets use AES-256-GCM before database storage.
 - IMAP access is read-only. Raw email bodies are discarded after processing.
 - Logs omit secrets, email bodies, chat bodies, and AI prompt bodies.
-- For access beyond localhost, use Tailscale or a TLS reverse proxy. Never expose MongrelDB port `8453`.
+- For access beyond localhost, proxy `127.0.0.1:3000` through Tailscale or TLS and set `TRUST_PROXY_HOPS` to the exact proxy count. Never expose MongrelDB port `8453`.
 
 ## Version pins
 

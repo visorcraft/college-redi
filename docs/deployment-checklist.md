@@ -2,7 +2,7 @@
 
 Before exposing Redi beyond localhost:
 
-- [ ] Run behind Tailscale or a TLS-terminating reverse proxy. Middleware sets security headers and HSTS when TLS is detected.
+- [ ] Keep Redi bound to `127.0.0.1:3000`; expose it only through Tailscale or a TLS-terminating reverse proxy. Middleware sets security headers and HSTS when TLS is detected.
 - [ ] Set `TRUST_PROXY_HOPS` to the exact reverse-proxy count. Leave it `0` without a proxy.
 - [ ] Claim the installation with `REDI_SETUP_TOKEN` from `$DATA_DIR/.env`.
 - [ ] Confirm `$DATA_DIR/.env` exists, is mode `0600`, and is backed up with `master.key`. Without them, encrypted data is permanently unrecoverable.

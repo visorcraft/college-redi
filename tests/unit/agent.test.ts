@@ -99,6 +99,7 @@ beforeEach(async () => {
   for (const table of [
     'chat_messages',
     'chat_conversations',
+    'job_leases',
     'secrets',
     'app_settings',
   ]) {
@@ -314,6 +315,26 @@ describe('Redi agent loop', () => {
       expect.anything(),
       expect.anything(),
     );
+  });
+
+  it('allows only one concurrent turn to consume a destructive confirmation', async () => {
+    const context = await boot([
+      { toolCalls: [{ name: 'delete_task', arguments: '{"id":"t1"}' }] },
+      { toolCalls: [{ name: 'delete_task', arguments: '{"id":"t1"}' }] },
+      { content: 'Deleted.' },
+    ]);
+    const conversation = await context.store.createConversation();
+    await context.agent.runAgentTurn(conversation.id, 'delete t1', () => undefined);
+
+    const results = await Promise.allSettled([
+      context.agent.runAgentTurn(conversation.id, 'yes', () => undefined),
+      context.agent.runAgentTurn(conversation.id, 'yes', () => undefined),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(context.callTool.mock.calls.filter(([name]) => name === 'delete_task'))
+      .toHaveLength(1);
   });
 
   it('forces a final answer without tools after eight tool rounds', async () => {

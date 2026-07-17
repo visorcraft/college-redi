@@ -92,7 +92,7 @@ const RESOURCES: McpResourceDef[] = [
 
 export function buildMcpServer(actor: string): Server {
   const server = new Server(
-    { name: 'redi', version: '0.1.2' },
+    { name: 'redi', version: '0.1.3' },
     { capabilities: { tools: {}, resources: {} } },
   );
 

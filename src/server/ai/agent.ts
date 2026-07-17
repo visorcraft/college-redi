@@ -16,6 +16,7 @@ export const MAX_TOOL_ROUNDS = 8;
 const HISTORY_WINDOW = 20;
 const TOOL_RESULT_MAX_CHARS = 4000;
 const REDI_CTX = { actor: 'redi' };
+const CHAT_TURN_LEASE_MS = 10 * 60_000;
 const summaryCache = new Map<string, { count: number; text: string }>();
 
 const AFFIRMATIVE =
@@ -444,6 +445,48 @@ export async function runAgentTurn(
   userText: string,
   onEvent: (event: AgentEvent) => void,
 ): Promise<{ text: string }> {
+  const scheduler = await import('../scheduler');
+  const leaseName = `chat:${conversationId}`;
+  const owner = await scheduler.acquireJobLeaseToken(
+    leaseName,
+    CHAT_TURN_LEASE_MS,
+  );
+  if (!owner) throw new Error('chat conversation already has an active turn');
+  let leaseError: Error | null = null;
+  let status: 'ok' | 'error' = 'error';
+  const stopHeartbeat = scheduler.keepJobLeaseAlive(
+    leaseName,
+    owner,
+    CHAT_TURN_LEASE_MS,
+    (error) => {
+      leaseError = error;
+    },
+  );
+  const assertLease = () => {
+    if (leaseError) throw leaseError;
+  };
+  try {
+    const result = await runClaimedAgentTurn(
+      conversationId,
+      userText,
+      onEvent,
+      assertLease,
+    );
+    status = 'ok';
+    return result;
+  } finally {
+    stopHeartbeat();
+    await scheduler.releaseJobLease(leaseName, status, new Date(), owner);
+  }
+}
+
+async function runClaimedAgentTurn(
+  conversationId: string,
+  userText: string,
+  onEvent: (event: AgentEvent) => void,
+  assertLease: () => void,
+): Promise<{ text: string }> {
+  assertLease();
   const conversation = await store.getConversation(conversationId);
   if (!conversation) {
     throw new Error(`chat conversation not found: ${conversationId}`);
@@ -495,6 +538,7 @@ export async function runAgentTurn(
       body,
       (text) => deltas.push(text),
     );
+    assertLease();
     if (
       authorization !== null
       && (
@@ -570,6 +614,7 @@ export async function runAgentTurn(
     }];
     let confirmedActionExecuted = false;
     for (const call of completion.toolCalls) {
+      assertLease();
       onEvent({ type: 'tool_start', name: call.name });
       const execution = await executeToolCall(call, authorization);
       if (execution.consumed) {

@@ -131,7 +131,7 @@ describe('MCP conformance', () => {
 
   it('lists exactly the safe registry tools with identical schemas', async () => {
     const client = await connectClient(rawToken);
-    expect(client.getServerVersion()).toEqual({ name: 'redi', version: '0.1.2' });
+    expect(client.getServerVersion()).toEqual({ name: 'redi', version: '0.1.3' });
     const { tools } = await client.listTools();
     const { getAllTools } = await import('../../src/server/tools/registry');
     const blocked = new Set([
