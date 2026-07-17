@@ -1,11 +1,11 @@
-import { eq, KitDatabase } from '@visorcraft/mongreldb-kit';
+import { KitDatabase } from '@visorcraft/mongreldb-kit';
 import { z } from 'zod';
 import { getConfig } from '../config';
 import { getDb } from '../db/client';
 import { getSecret } from '../secrets';
 import { getSettings } from '../settings';
 import { isSchedulerAlive } from '../scheduler';
-import { notifications } from '../../../db/schema';
+import { sqlRows } from '../db/sql';
 import { defineTool, registerTool, type Tool } from './registry';
 
 export const getSystemStatusTool: Tool = defineTool({
@@ -28,10 +28,9 @@ export const getSystemStatusTool: Tool = defineTool({
     } catch (err) {
       dbStatus = { mode: cfg.DATABASE_MODE, ok: false, error: err instanceof Error ? err.message : String(err) };
     }
-    let pending = 0;
-    if (db instanceof KitDatabase) {
-      pending = db.selectFrom(notifications).where(eq(notifications.status, 'pending')).executeSync().length;
-    }
+    const pending = (await sqlRows<{ id: string }>(
+      "SELECT id FROM notifications WHERE status = 'pending'",
+    )).length;
     const [aiKey, imapPassword, smtpPassword, twilioToken] = await Promise.all([
       getSecret('ai.api_key'),
       getSecret('imap.password'),

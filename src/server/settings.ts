@@ -1,9 +1,7 @@
-import { eq } from '@visorcraft/mongreldb-kit';
-import { getKitDb } from './db/client';
-import { appSettings } from '../../db/schema';
+import { lit, sqlExec, sqlRows } from './db/sql';
 import { AppSettingsSchema, type AppSettings, type SettingsPatch } from '../lib/schemas/settings';
 
-const ROW_ID = 1n;
+const ROW_ID = 1;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -19,25 +17,25 @@ export function deepMerge<T>(base: T, patch: unknown): T {
 }
 
 export async function getSettings(): Promise<AppSettings> {
-  const db = await getKitDb();
-  const rows = db.selectFrom(appSettings).where(eq(appSettings.id, ROW_ID)).executeSync();
-  const row = rows[0];
+  const row = (await sqlRows<{ payload: string }>(
+    `SELECT payload FROM app_settings WHERE id = ${ROW_ID}`,
+  ))[0];
   if (!row) {
     const fresh = AppSettingsSchema.parse({});
-    db.insertInto(appSettings)
-      .values({ id: ROW_ID, payload: JSON.stringify(fresh), updated_at: new Date().toISOString() })
-      .executeSync();
+    await sqlExec(
+      `INSERT INTO app_settings (id, payload, updated_at) VALUES (` +
+      `${ROW_ID}, ${lit(JSON.stringify(fresh))}, ${lit(new Date())})`,
+    );
     return fresh;
   }
-  return AppSettingsSchema.parse(JSON.parse(row.payload as string));
+  return AppSettingsSchema.parse(JSON.parse(row.payload));
 }
 
 export async function updateSettings(patch: SettingsPatch): Promise<AppSettings> {
-  const db = await getKitDb();
   const merged = AppSettingsSchema.parse(deepMerge(await getSettings(), patch));
-  db.updateTable(appSettings)
-    .set({ payload: JSON.stringify(merged), updated_at: new Date().toISOString() })
-    .where(eq(appSettings.id, ROW_ID))
-    .executeSync();
+  await sqlExec(
+    `UPDATE app_settings SET payload = ${lit(JSON.stringify(merged))}, ` +
+    `updated_at = ${lit(new Date())} WHERE id = ${ROW_ID}`,
+  );
   return merged;
 }

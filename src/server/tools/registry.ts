@@ -35,6 +35,8 @@ export function listTools(): Tool[] {
   return [...tools.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export const getAllTools = listTools;
+
 export function _resetRegistryForTests(): void {
   tools.clear();
 }

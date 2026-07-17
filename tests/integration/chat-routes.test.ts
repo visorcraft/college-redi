@@ -8,10 +8,15 @@ import {
 } from '../fixtures/ai/stub-server';
 
 let stub: StubServer | null = null;
+let dataDir: string | null = null;
 
 afterEach(async () => {
   await stub?.close();
   stub = null;
+  const { _resetDbForTests } = await import('../../src/server/db/client');
+  _resetDbForTests();
+  if (dataDir) await fs.rm(dataDir, { recursive: true, force: true });
+  dataDir = null;
 });
 
 async function boot(
@@ -30,6 +35,7 @@ async function boot(
   }
 
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redi-chat-routes-'));
+  dataDir = dir;
   Object.assign(process.env, {
     DATA_DIR: dir,
     DATABASE_MODE: 'embedded',

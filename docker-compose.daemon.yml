@@ -1,0 +1,67 @@
+# Redi + MongrelDB daemon mode (spec §4.2, topology B1).
+#
+# Generate bootstrap credentials once before first start:
+#   DATA_DIR=./redi-data ./scripts/bootstrap-env.sh
+#   set -a; . ./redi-data/.env; set +a
+#   docker compose -f docker-compose.daemon.yml up -d
+#
+# MongrelDB binds 127.0.0.1 only, so host networking is required on Linux.
+# Run exactly one MongrelDB container per data directory. Never expose :8453
+# to untrusted networks or downgrade against an existing WAL v4 data directory.
+
+services:
+  mongreldb:
+    image: ghcr.io/visorcraft/mongreldb-server:v0.59.0
+    network_mode: host
+    env_file: ./redi-data/.env
+    command: ["/data", "--port", "8453", "--auth-users", "--passphrase", "${MONGRELDB_PASSPHRASE}"]
+    volumes:
+      - ./redi-data/db:/data
+    restart: always
+
+  redi:
+    image: ghcr.io/visorcraft/redi:latest
+    network_mode: host
+    env_file: ./redi-data/.env
+    environment:
+      DATABASE_MODE: remote
+      MONGRELDB_URL: http://127.0.0.1:8453
+      PORT: "3000"
+    volumes:
+      - ./redi-data/app:/data
+    depends_on: [mongreldb]
+    restart: always
+
+# B2 variant for bridge networks, including Docker Desktop:
+# run a proxy inside the MongrelDB network namespace. Replace the services
+# above with these three. The proxy must bind the namespace's primary address,
+# not 0.0.0.0:8453, because the daemon already owns 127.0.0.1:8453.
+#
+#   mongreldb:
+#     image: ghcr.io/visorcraft/mongreldb-server:v0.59.0
+#     env_file: ./redi-data/.env
+#     command: ["/data", "--port", "8453", "--auth-users", "--passphrase", "${MONGRELDB_PASSPHRASE}"]
+#     volumes:
+#       - ./redi-data/db:/data
+#     restart: always
+#
+#   mongreldb-proxy:
+#     image: alpine/socat:latest
+#     network_mode: service:mongreldb
+#     command: ["sh", "-c", "socat TCP-LISTEN:8453,fork,reuseaddr,bind=$$(hostname -i) TCP:127.0.0.1:8453"]
+#     depends_on: [mongreldb]
+#     restart: always
+#
+#   redi:
+#     image: ghcr.io/visorcraft/redi:latest
+#     env_file: ./redi-data/.env
+#     environment:
+#       DATABASE_MODE: remote
+#       MONGRELDB_URL: http://mongreldb:8453
+#       PORT: "3000"
+#     ports:
+#       - "3000:3000"
+#     volumes:
+#       - ./redi-data/app:/data
+#     depends_on: [mongreldb-proxy]
+#     restart: always

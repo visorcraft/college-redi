@@ -18,7 +18,7 @@ export async function bootstrap(): Promise<void> {
   await runMigrations(db);
   registerAllTools();
   if (cfg.SCHEDULER_ENABLED) await startScheduler();
-  console.log(
+  console.info(
     JSON.stringify({ level: 'info', msg: 'redi bootstrap complete', mode: cfg.DATABASE_MODE, scheduler: cfg.SCHEDULER_ENABLED }),
   );
 }

@@ -1,7 +1,4 @@
 import cron, { type ScheduledTask } from 'node-cron';
-import { eq, lt } from '@visorcraft/mongreldb-kit';
-import { getKitDb } from './db/client';
-import { jobLeases } from '../../db/schema';
 import { getSettings } from './settings';
 import { lit, sqlExec, sqlRows } from './db/sql';
 import { runDailyDigestJob, runNotificationDispatchJob, runRegistrationSweepJob } from './notify/jobs';
@@ -63,55 +60,77 @@ export async function withLease(
     await sqlExec(`UPDATE job_leases SET last_status = 'ok' WHERE job_name = ${lit(jobName)}`);
   } catch (err) {
     await sqlExec(`UPDATE job_leases SET last_status = 'error' WHERE job_name = ${lit(jobName)}`);
-    console.error(`[scheduler] job "${jobName}" failed`, err);
+    console.error(JSON.stringify({
+      level: 'error',
+      msg: 'scheduler job failed',
+      job: jobName,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    }));
   }
   return { skipped: false };
 }
 
 /** Returns true when the lease was acquired; false when another run still holds it. */
 export async function acquireJobLease(jobName: string, ttlMs: number): Promise<boolean> {
-  const db = await getKitDb();
   const now = new Date();
   const nowIso = now.toISOString();
-  const rows = db.selectFrom(jobLeases).where(eq(jobLeases.job_name, jobName)).executeSync();
+  const rows = await sqlRows<{
+    job_name: string;
+    locked_until: string;
+  }>(
+    `SELECT job_name, locked_until FROM job_leases ` +
+    `WHERE job_name = ${lit(jobName)}`,
+  );
   const existing = rows[0];
   // A lease past its locked_until is stale and may be taken over (spec §13 job overrun).
   if (existing && (existing.locked_until as string) > nowIso) return false;
   const lockedUntil = new Date(now.getTime() + ttlMs).toISOString();
   if (existing) {
-    db.updateTable(jobLeases)
-      .set({ locked_until: lockedUntil, last_run_at: nowIso, last_status: 'running' })
-      .where(eq(jobLeases.job_name, jobName))
-      .executeSync();
+    await sqlExec(
+      `UPDATE job_leases SET locked_until = ${lit(lockedUntil)}, ` +
+      `last_run_at = ${lit(nowIso)}, last_status = 'running' ` +
+      `WHERE job_name = ${lit(jobName)}`,
+    );
   } else {
-    db.insertInto(jobLeases)
-      .values({ job_name: jobName, locked_until: lockedUntil, last_run_at: nowIso, last_status: 'running' })
-      .executeSync();
+    await sqlExec(
+      `INSERT INTO job_leases (job_name, locked_until, last_run_at, last_status) VALUES (` +
+      `${lit(jobName)}, ${lit(lockedUntil)}, ${lit(nowIso)}, 'running')`,
+    );
   }
   return true;
 }
 
 export async function releaseJobLease(jobName: string, status: 'ok' | 'failed'): Promise<void> {
-  const db = await getKitDb();
   const nowIso = new Date().toISOString();
-  const rows = db.selectFrom(jobLeases).where(eq(jobLeases.job_name, jobName)).executeSync();
+  const rows = await sqlRows<{ job_name: string }>(
+    `SELECT job_name FROM job_leases WHERE job_name = ${lit(jobName)}`,
+  );
   if (rows.length === 0) {
-    db.insertInto(jobLeases)
-      .values({ job_name: jobName, locked_until: nowIso, last_run_at: nowIso, last_status: status })
-      .executeSync();
+    await sqlExec(
+      `INSERT INTO job_leases (job_name, locked_until, last_run_at, last_status) VALUES (` +
+      `${lit(jobName)}, ${lit(nowIso)}, ${lit(nowIso)}, ${lit(status)})`,
+    );
     return;
   }
   // locked_until = now makes the job immediately re-acquirable.
-  db.updateTable(jobLeases)
-    .set({ locked_until: nowIso, last_status: status })
-    .where(eq(jobLeases.job_name, jobName))
-    .executeSync();
+  await sqlExec(
+    `UPDATE job_leases SET locked_until = ${lit(nowIso)}, ` +
+    `last_status = ${lit(status)} WHERE job_name = ${lit(jobName)}`,
+  );
 }
 
 const STALE_LEASE_MS = 24 * 60 * 60 * 1000; // locked_until + 1 day (spec §7.6)
 
 export async function sweepExpiredLeases(): Promise<number> {
-  const db = await getKitDb();
   const cutoff = new Date(Date.now() - STALE_LEASE_MS).toISOString();
-  return Number(db.deleteFrom(jobLeases).where(lt(jobLeases.locked_until, cutoff)).executeSync());
+  const rows = await sqlRows<{ job_name: string }>(
+    `SELECT job_name FROM job_leases WHERE locked_until < ${lit(cutoff)}`,
+  );
+  if (rows.length > 0) {
+    await sqlExec(
+      `DELETE FROM job_leases WHERE locked_until < ${lit(cutoff)}`,
+    );
+  }
+  return rows.length;
 }

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { getKitDb } from '../db/client';
-import { auditLog } from '../../../db/schema';
+import { lit, sqlExec } from '../db/sql';
 import { getTool, type ToolContext } from './registry';
 
 export class ToolNotFoundError extends Error {
@@ -26,18 +25,13 @@ export class ToolConfirmationRequiredError extends Error {
 
 async function writeAudit(actor: string, toolName: string, detail: Record<string, unknown>): Promise<void> {
   try {
-    const db = await getKitDb();
-    db.insertInto(auditLog)
-      .values({
-        id: randomUUID(),
-        actor,
-        tool_name: toolName,
-        entity_type: null,
-        entity_id: null,
-        detail: JSON.stringify(detail),
-        created_at: new Date().toISOString(),
-      })
-      .executeSync();
+    await sqlExec(
+      `INSERT INTO audit_log (` +
+      `id, actor, tool_name, entity_type, entity_id, detail, created_at` +
+      `) VALUES (` +
+      `${lit(randomUUID())}, ${lit(actor)}, ${lit(toolName)}, NULL, NULL, ` +
+      `${lit(JSON.stringify(detail))}, ${lit(new Date())})`,
+    );
   } catch (err) {
     console.error(JSON.stringify({ level: 'error', msg: 'audit_log write failed', error: String(err) }));
   }

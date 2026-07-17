@@ -87,6 +87,7 @@ export function RediWidget({ aiConfigured }: { aiConfigured: boolean }) {
     <>
       <button
         type="button"
+        data-testid="redi-widget"
         aria-label={statusLine}
         aria-expanded={open}
         title={statusLine}

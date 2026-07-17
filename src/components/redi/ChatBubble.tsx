@@ -389,6 +389,7 @@ export function ChatBubble({
             </label>
             <input
               id="redi-chat-input"
+              data-testid="chat-input"
               ref={inputRef}
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -398,6 +399,7 @@ export function ChatBubble({
             />
             <button
               type="submit"
+              data-testid="chat-send"
               disabled={busy || !input.trim()}
               aria-label="Send message"
               className="rounded-full bg-[#1F2D50] px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-[#FFC24B] disabled:opacity-50"

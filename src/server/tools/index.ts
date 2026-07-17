@@ -6,6 +6,7 @@ import { termsTools } from './terms';
 import { taskTools } from './tasks';
 import { notificationTools } from './notifications';
 import { emailTools } from './email';
+import { mcpTokenTools } from './mcpTokens';
 import { registerTool, type Tool } from './registry';
 
 const globalState = globalThis as typeof globalThis & { __rediToolsRegistered?: boolean };
@@ -21,6 +22,7 @@ export function registerAllTools(): void {
     ...taskTools,
     ...notificationTools,
     ...emailTools,
+    ...mcpTokenTools,
   ]) registerTool(tool);
   globalState.__rediToolsRegistered = true;
 }

@@ -6,6 +6,7 @@ const NAV: ReadonlyArray<[string, string]> = [
   ['Personal email', '/settings/smtp'],
   ['Text messages', '/settings/twilio'],
   ['Notifications', '/settings/notifications'],
+  ['AI agent access', '/settings/agent'],
   ['Security', '/settings/security'],
   ['Status', '/settings/status'],
 ];

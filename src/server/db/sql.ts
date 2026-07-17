@@ -22,6 +22,9 @@ export async function sqlExec(sql: string): Promise<void> {
   await (await getDb()).sql(sql);
 }
 
+export const queryRows = sqlRows;
+export const execSql = sqlExec;
+
 export function lit(value: string | number | boolean | Date | null): string {
   if (value === null) return 'NULL';
   if (value instanceof Date) return `'${value.toISOString()}'`;
@@ -32,3 +35,5 @@ export function lit(value: string | number | boolean | Date | null): string {
   }
   return `'${value.replace(/'/g, "''")}'`;
 }
+
+export const sqlString = (value: string): string => lit(value);
