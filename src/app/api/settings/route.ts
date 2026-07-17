@@ -1,7 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { ensureBootstrapped } from '@/server/bootstrap';
-import { jsonError } from '@/server/http';
-import { callTool, ToolValidationError } from '@/server/tools/call';
+import { callTool } from '@/server/tools/call';
+import { SettingsPatchSchema } from '@/lib/schemas/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,16 +10,14 @@ export async function GET() {
   return NextResponse.json(await callTool('get_settings', {}, { actor: 'user' }));
 }
 
-export async function PATCH(req: NextRequest) {
+export async function PATCH(req: Request) {
   await ensureBootstrapped();
-  const body = await req.json().catch(() => null);
-  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-    return jsonError('invalid_body', 'Expected a JSON object of settings to merge.', 400);
+  const parsed = SettingsPatchSchema.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: { code: 'bad_request', message: parsed.error.issues[0]?.message ?? 'Invalid settings patch.' } },
+      { status: 400 },
+    );
   }
-  try {
-    return NextResponse.json(await callTool('update_settings', body, { actor: 'user' }));
-  } catch (err) {
-    if (err instanceof ToolValidationError) return jsonError('invalid_params', err.message, 400);
-    throw err;
-  }
+  return NextResponse.json(await callTool('update_settings', parsed.data, { actor: 'user' }));
 }

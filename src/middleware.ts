@@ -13,7 +13,7 @@ export default async function middleware(req: NextRequest) {
   const isApi = pathname.startsWith('/api/');
 
   if (!valid) {
-    if (pathname === '/login') return NextResponse.next();
+    if (pathname === '/login' || pathname === '/wizard') return NextResponse.next();
     if (isApi) {
       return NextResponse.json({ error: { code: 'unauthenticated', message: 'Sign in required.' } }, { status: 401 });
     }
