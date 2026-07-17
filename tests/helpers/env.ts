@@ -17,6 +17,8 @@ export function makeTestEnv(overrides: Record<string, string> = {}): TestEnv {
   process.env.SESSION_SECRET = 'unit-session-secret';
   process.env.SCHEDULER_ENABLED = 'false';
   delete process.env.REDI_MASTER_KEY;
+  delete process.env.REDI_SETUP_TOKEN;
+  delete process.env.TRUST_PROXY_HOPS;
   for (const [k, v] of Object.entries(overrides)) process.env[k] = v;
   return { dataDir, cleanup: () => rmSync(dataDir, { recursive: true, force: true }) };
 }

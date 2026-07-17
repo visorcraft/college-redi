@@ -2,7 +2,8 @@ import { eq } from '@visorcraft/mongreldb-kit';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeTestEnv, resetServerState, type TestEnv } from '../helpers/env';
 import {
-  acquireJobLease, isSchedulerAlive, releaseJobLease, startScheduler, stopScheduler, sweepExpiredLeases,
+  acquireJobLease, acquireJobLeaseToken, isSchedulerAlive, releaseJobLease,
+  startScheduler, stopScheduler, sweepExpiredLeases,
 } from '@/server/scheduler';
 import { getKitDb } from '@/server/db/client';
 import { jobLeases } from '../../db/schema';
@@ -25,6 +26,14 @@ describe('job leases', () => {
     expect(await acquireJobLease('other_job', 60_000)).toBe(true);
   });
 
+  it('atomically grants only one concurrent lease', async () => {
+    const claims = await Promise.all([
+      acquireJobLease('race', 60_000),
+      acquireJobLease('race', 60_000),
+    ]);
+    expect(claims.sort()).toEqual([false, true]);
+  });
+
   it('allows re-acquire after release, and after the lease expires', async () => {
     expect(await acquireJobLease('digest', 60_000)).toBe(true);
     await releaseJobLease('digest', 'ok');
@@ -33,6 +42,17 @@ describe('job leases', () => {
     const past = new Date(Date.now() - 60_000).toISOString();
     db.updateTable(jobLeases).set({ locked_until: past }).where(eq(jobLeases.job_name, 'digest')).executeSync();
     expect(await acquireJobLease('digest', 60_000)).toBe(true);
+  });
+
+  it('does not let an expired owner release a replacement lease', async () => {
+    const firstAt = new Date('2026-07-17T12:00:00.000Z');
+    const secondAt = new Date('2026-07-17T12:02:00.000Z');
+    const first = await acquireJobLeaseToken('slow_job', 60_000, firstAt);
+    const second = await acquireJobLeaseToken('slow_job', 60_000, secondAt);
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    await releaseJobLease('slow_job', 'ok', secondAt, first!);
+    expect(await acquireJobLease('slow_job', 60_000, secondAt)).toBe(false);
   });
 
   it('sweeps only leases expired for more than a day', async () => {
@@ -53,6 +73,7 @@ describe('job leases', () => {
 
 describe('scheduler lifecycle', () => {
   it('starts (idempotently) and stops', async () => {
+    delete process.env.SCHEDULER_ENABLED;
     expect(isSchedulerAlive()).toBe(false);
     await startScheduler();
     await startScheduler();

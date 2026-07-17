@@ -2,27 +2,65 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { lit, sqlExec, sqlRows } from './db/sql';
 import { getMasterKey } from './keys';
 
+let insertLock = Promise.resolve();
+
 export async function setSecret(name: string, value: string): Promise<void> {
+  const encrypted = await encrypt(value);
+  const existing = await sqlRows<{ name: string }>(
+    `SELECT name FROM secrets WHERE name = ${lit(name)}`,
+  );
+  if (existing.length === 0) {
+    await insertSecret(name, encrypted);
+  } else {
+    await sqlExec(
+      `UPDATE secrets SET ciphertext = ${encrypted.blob}, rotated_at = ${lit(encrypted.now)} ` +
+      `WHERE name = ${lit(name)}`,
+    );
+  }
+}
+
+export async function setSecretIfAbsent(
+  name: string,
+  value: string,
+): Promise<boolean> {
+  const previous = insertLock;
+  let release = () => {};
+  insertLock = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    if (await getSecret(name) !== null) return false;
+    const encrypted = await encrypt(value);
+    await insertSecret(name, encrypted);
+    return true;
+  } catch (error) {
+    if (await getSecret(name) !== null) return false;
+    throw error;
+  } finally {
+    release();
+  }
+}
+
+async function encrypt(value: string): Promise<{ blob: string; now: string }> {
   const key = await getMasterKey();
   const nonce = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key, nonce);
   const sealed = Buffer.concat([nonce, cipher.update(value, 'utf8'), cipher.final(), cipher.getAuthTag()]);
-  const now = new Date().toISOString();
-  const existing = await sqlRows<{ name: string }>(
-    `SELECT name FROM secrets WHERE name = ${lit(name)}`,
+  return {
+    blob: lit(`b64:${sealed.toString('base64url')}`),
+    now: new Date().toISOString(),
+  };
+}
+
+async function insertSecret(
+  name: string,
+  encrypted: { blob: string; now: string },
+): Promise<void> {
+  await sqlExec(
+    `INSERT INTO secrets (name, ciphertext, created_at, rotated_at) VALUES (` +
+    `${lit(name)}, ${encrypted.blob}, ${lit(encrypted.now)}, ${lit(encrypted.now)})`,
   );
-  const blob = lit(`b64:${sealed.toString('base64url')}`);
-  if (existing.length === 0) {
-    await sqlExec(
-      `INSERT INTO secrets (name, ciphertext, created_at, rotated_at) VALUES (` +
-      `${lit(name)}, ${blob}, ${lit(now)}, ${lit(now)})`,
-    );
-  } else {
-    await sqlExec(
-      `UPDATE secrets SET ciphertext = ${blob}, rotated_at = ${lit(now)} ` +
-      `WHERE name = ${lit(name)}`,
-    );
-  }
 }
 
 export async function getSecret(name: string): Promise<string | null> {

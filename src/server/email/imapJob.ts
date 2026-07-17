@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { getSettings, updateSettings } from '../settings';
+import { acquireJobLeaseToken, releaseJobLease } from '../scheduler';
 import { runEmailPipeline } from './pipeline';
-import { getJobLease, upsertJobLease } from './store';
 
 export const IMAP_POLL_JOB = 'imap_poll';
 export const BACKOFF_MINUTES = [5, 10, 30, 60] as const;
@@ -35,24 +35,17 @@ export async function runImapPollJob(now: Date = new Date()): Promise<ImapJobOut
     && new Date(imap.last_poll_at).getTime() + intervalMinutes * 60_000 > now.getTime()) {
     return { ran: false, reason: 'not_due' };
   }
-  const lease = await getJobLease(IMAP_POLL_JOB);
-  if (lease?.locked_until && new Date(lease.locked_until) > now) {
+  const leaseOwner = await acquireJobLeaseToken(
+    IMAP_POLL_JOB,
+    2 * intervalMinutes * 60_000,
+    now,
+  );
+  if (!leaseOwner) {
     return { ran: false, reason: 'lease' };
   }
-  await upsertJobLease({
-    job_name: IMAP_POLL_JOB,
-    locked_until: new Date(now.getTime() + 2 * intervalMinutes * 60_000).toISOString(),
-    last_run_at: now.toISOString(),
-    last_status: 'running',
-  });
   try {
     await runEmailPipeline({ actor: 'system' });
-    await upsertJobLease({
-      job_name: IMAP_POLL_JOB,
-      locked_until: now.toISOString(),
-      last_run_at: now.toISOString(),
-      last_status: 'ok',
-    });
+    await releaseJobLease(IMAP_POLL_JOB, 'ok', now, leaseOwner);
     return { ran: true };
   } catch (error) {
     const message = String(error instanceof Error ? error.message : error).slice(0, 500);
@@ -64,12 +57,7 @@ export async function runImapPollJob(now: Date = new Date()): Promise<ImapJobOut
       backoff_step: Math.min(step + 1, BACKOFF_MINUTES.length - 1),
       next_poll_after: new Date(now.getTime() + delayMinutes * 60_000).toISOString(),
     });
-    await upsertJobLease({
-      job_name: IMAP_POLL_JOB,
-      locked_until: now.toISOString(),
-      last_run_at: now.toISOString(),
-      last_status: 'error',
-    });
+    await releaseJobLease(IMAP_POLL_JOB, 'error', now, leaseOwner);
     console.warn(JSON.stringify({
       level: 'warn',
       job: IMAP_POLL_JOB,

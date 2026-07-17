@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { describe, expect, it } from 'vitest';
 import {
   applySecurityHeaders,
+  _rateLimitBucketCountForTests,
   clientIp,
   csrfFailure,
   ensureCsrfCookie,
+  isSecureRequest,
   rateLimitExceeded,
 } from '../../src/server/security';
 
@@ -49,14 +51,25 @@ describe('security headers', () => {
     expect(plain.headers.get('permissions-policy')).toContain('camera=()');
     expect(plain.headers.get('strict-transport-security')).toBeNull();
 
-    const tls = applySecurityHeaders(
-      NextResponse.next(),
-      req('http://localhost/', {
-        headers: { 'x-forwarded-proto': 'https' },
-      }),
-    );
+    const tls = applySecurityHeaders(NextResponse.next(), req('https://localhost/'));
     expect(tls.headers.get('strict-transport-security'))
       .toContain('max-age=31536000');
+  });
+
+  it('trusts forwarded TLS only when a proxy is configured', () => {
+    const forwarded = req('http://localhost/', {
+      headers: { 'x-forwarded-proto': 'https' },
+    });
+    const previous = process.env.TRUST_PROXY_HOPS;
+    try {
+      process.env.TRUST_PROXY_HOPS = '0';
+      expect(isSecureRequest(forwarded)).toBe(false);
+      process.env.TRUST_PROXY_HOPS = '1';
+      expect(isSecureRequest(forwarded)).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.TRUST_PROXY_HOPS;
+      else process.env.TRUST_PROXY_HOPS = previous;
+    }
   });
 });
 
@@ -121,10 +134,20 @@ describe('rate limiter', () => {
       .toBe(false);
   });
 
-  it('parses the first forwarded client IP', () => {
+  it('bounds attacker-controlled client buckets', () => {
+    for (let i = 0; i < 10_100; i += 1) {
+      rateLimitExceeded(`attacker:${i}`, 1, 60_000);
+    }
+    expect(_rateLimitBucketCountForTests()).toBeLessThanOrEqual(10_000);
+  });
+
+  it('uses only the configured trusted proxy depth', () => {
     expect(clientIp(req('http://localhost/', {
-      headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' },
-    }))).toBe('1.2.3.4');
-    expect(clientIp(req('http://localhost/'))).toBe('local');
+      headers: { 'x-forwarded-for': 'spoofed, 1.2.3.4, 10.0.0.1' },
+    }), 2)).toBe('1.2.3.4');
+    expect(clientIp(req('http://localhost/', {
+      headers: { 'x-forwarded-for': 'spoofed' },
+    }))).toBeNull();
+    expect(clientIp(req('http://localhost/'))).toBeNull();
   });
 });

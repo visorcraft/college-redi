@@ -6,6 +6,7 @@ import {
   contentSecurityPolicy,
   csrfFailure,
   ensureCsrfCookie,
+  isSecureRequest,
   rateLimitExceeded,
   rateLimitResponse,
   RATE_LIMITS,
@@ -24,27 +25,31 @@ export default async function middleware(req: NextRequest) {
   });
   const secure = (response: NextResponse) =>
     ensureCsrfCookie(applySecurityHeaders(response, req, nonce), req);
+  const ip = clientIp(req);
 
   if (
     pathname === '/api/auth/login'
+    && ip !== null
     && rateLimitExceeded(
-      `login:${clientIp(req)}`,
+      `login:${ip}`,
       RATE_LIMITS.login.limit,
       RATE_LIMITS.login.windowMs,
     )
   ) return secure(rateLimitResponse());
   if (
     pathname === '/api/cron/tick'
+    && ip !== null
     && rateLimitExceeded(
-      `cron:${clientIp(req)}`,
+      `cron:${ip}`,
       RATE_LIMITS.cron.limit,
       RATE_LIMITS.cron.windowMs,
     )
   ) return secure(rateLimitResponse());
   if (
     pathname.startsWith('/mcp')
+    && ip !== null
     && rateLimitExceeded(
-      `mcp:${clientIp(req)}`,
+      `mcp:${ip}`,
       RATE_LIMITS.mcp.limit,
       RATE_LIMITS.mcp.windowMs,
     )
@@ -85,6 +90,7 @@ export default async function middleware(req: NextRequest) {
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_TTL_SECONDS,
+    secure: isSecureRequest(req),
   });
   return secure(res);
 }

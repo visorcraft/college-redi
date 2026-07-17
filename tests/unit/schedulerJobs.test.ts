@@ -145,13 +145,26 @@ describe('scheduler registration (Appendix C) and job_leases (spec §3.4)', () =
     delete process.env.SCHEDULER_ENABLED;
     await scheduler.startScheduler();
     expect(cronMock.schedule.mock.calls.map((c) => c[0]))
-      .toEqual(['* * * * *', '7 * * * *', '0 8 * * *']);
+      .toEqual(['* * * * *', '7 * * * *', '* * * * *', '17 * * * *']);
     scheduler.stopScheduler();
     cronMock.schedule.mockClear();
     process.env.SCHEDULER_ENABLED = 'false';
     await scheduler.startScheduler();
     expect(cronMock.schedule).not.toHaveBeenCalled();
     delete process.env.SCHEDULER_ENABLED;
+  });
+
+  it('reads digest time and timezone on every tick', async () => {
+    expect(await scheduler.runDailyDigestIfDue(
+      new Date('2026-08-20T12:30:00.000Z'),
+    )).toEqual({ skipped: true });
+    await updateSettings({
+      timezone: 'America/Chicago',
+      notification_prefs: { digest_time: '07:30' },
+    });
+    expect(await scheduler.runDailyDigestIfDue(
+      new Date('2026-08-20T12:30:00.000Z'),
+    )).toMatchObject({ skipped: false });
   });
 
   it('withLease skips a job whose lease is still held and records last_status', async () => {

@@ -1,4 +1,5 @@
 import type OpenAI from 'openai';
+import { isDeepStrictEqual } from 'node:util';
 import * as store from '../chat/store';
 import { getSettings } from '../settings';
 import { callTool } from '../tools/call';
@@ -21,14 +22,51 @@ const CONFIRM_ASK =
   /\b(confirm|are you sure|shall i|should i|do you want me to|reply (with )?yes)\b/i;
 const AFFIRMATIVE =
   /^\s*(yes|yep|yeah|y|sure|ok|okay|confirm|confirmed|do it|go ahead|proceed|delete it|remove it|yes please|yes,? do it)[.!]?\s*$/i;
+const CONFIRM_PREFIX = '<!-- redi-confirm:';
+const CONFIRM_SUFFIX = '-->';
+
+interface DestructiveAuthorization {
+  tool: string;
+  arguments: Record<string, unknown>;
+}
 
 export function shouldArmDestructive(
   previousAssistant: string | null,
   userText: string,
 ): boolean {
-  return previousAssistant !== null
-    && CONFIRM_ASK.test(previousAssistant)
-    && AFFIRMATIVE.test(userText);
+  return destructiveAuthorization(previousAssistant, userText) !== null;
+}
+
+function destructiveAuthorization(
+  previousAssistant: string | null,
+  userText: string,
+): DestructiveAuthorization | null {
+  if (
+    previousAssistant === null
+    || !CONFIRM_ASK.test(previousAssistant)
+    || !AFFIRMATIVE.test(userText)
+  ) return null;
+  const start = previousAssistant.lastIndexOf(CONFIRM_PREFIX);
+  const end = previousAssistant.indexOf(
+    CONFIRM_SUFFIX,
+    start + CONFIRM_PREFIX.length,
+  );
+  if (start < 0 || end < 0) return null;
+  try {
+    const value = JSON.parse(previousAssistant.slice(
+      start + CONFIRM_PREFIX.length,
+      end,
+    )) as DestructiveAuthorization;
+    const tool = listTools().find((candidate) => candidate.name === value.tool);
+    return tool?.sideEffect === 'destructive'
+      && value.arguments
+      && typeof value.arguments === 'object'
+      && !Array.isArray(value.arguments)
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function buildSystemPrompt(
@@ -50,7 +88,8 @@ export function buildSystemPrompt(
     `Student snapshot (fetched fresh for this turn):\n${snapshot}`,
     'Rules:',
     '- Always prefer calling tools over memory for facts about the student. Never invent dates, deadlines, amounts, or course codes; read them from tools.',
-    '- Destructive tools (delete/revoke) only become available right after the user confirms in plain words. Before that, describe exactly what you would do and ask them to confirm.',
+    '- Before a destructive tool, describe exactly what and which record you would delete/revoke, ask for confirmation, then end with this exact hidden marker using real tool arguments: <!-- redi-confirm:{"tool":"tool_name","arguments":{"id":"record-id"}} -->',
+    '- A confirmation authorizes only that exact tool call once. Never change its arguments after asking.',
     '- Keep answers under ~120 words unless the user asks for detail.',
     '- If no tool can answer something, say so plainly instead of guessing.',
   ];
@@ -135,9 +174,10 @@ export async function buildStudentSnapshot(): Promise<string> {
   return lines.length ? lines.join('\n') : 'No student data yet; brand-new account.';
 }
 
-function projectTools(armed: boolean) {
+function projectTools(authorization: DestructiveAuthorization | null) {
   return listTools()
-    .filter((tool) => armed || tool.sideEffect !== 'destructive')
+    .filter((tool) => tool.sideEffect !== 'destructive'
+      || tool.name === authorization?.tool)
     .map((tool) => ({
       type: 'function' as const,
       function: {
@@ -154,24 +194,38 @@ interface PendingToolCall {
   args: string;
 }
 
-async function executeToolCall(call: PendingToolCall, armed: boolean): Promise<string> {
+async function executeToolCall(
+  call: PendingToolCall,
+  authorization: DestructiveAuthorization | null,
+): Promise<{ text: string; consumed: boolean }> {
   let parsed: unknown;
   try {
     parsed = call.args ? JSON.parse(call.args) : {};
   } catch {
-    return `Error: invalid JSON arguments for ${call.name}; ask the model to retry.`;
+    return {
+      text: `Error: invalid JSON arguments for ${call.name}; ask the model to retry.`,
+      consumed: false,
+    };
   }
   const params = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
     ? parsed as Record<string, unknown>
     : {};
   const tool = listTools().find((candidate) => candidate.name === call.name);
-  if (!tool) return `Error: unknown tool ${call.name}.`;
+  if (!tool) return { text: `Error: unknown tool ${call.name}.`, consumed: false };
 
   let effectiveParams = params;
+  let consumed = false;
   if (tool.sideEffect === 'destructive') {
-    if (!armed) {
-      return `Error: ${call.name} is destructive. Ask the user to confirm in plain words first.`;
+    if (
+      authorization?.tool !== call.name
+      || !isDeepStrictEqual(params, authorization.arguments)
+    ) {
+      return {
+        text: `Error: ${call.name} arguments do not match the user's confirmation. Ask again with the exact operation.`,
+        consumed: false,
+      };
     }
+    consumed = true;
     effectiveParams = { ...params, confirm: true };
   }
   try {
@@ -180,9 +234,12 @@ async function executeToolCall(call: PendingToolCall, armed: boolean): Promise<s
     if (text.length > TOOL_RESULT_MAX_CHARS) {
       text = `${text.slice(0, TOOL_RESULT_MAX_CHARS)}…(trimmed)`;
     }
-    return text;
+    return { text, consumed };
   } catch (error) {
-    return `Error from ${call.name}: ${error instanceof Error ? error.message : String(error)}`;
+    return {
+      text: `Error from ${call.name}: ${error instanceof Error ? error.message : String(error)}`,
+      consumed,
+    };
   }
 }
 
@@ -194,6 +251,24 @@ async function streamCompletion(
   body: Record<string, unknown>,
   onDelta: (text: string) => void,
 ): Promise<{ text: string; toolCalls: PendingToolCall[] }> {
+  let pending = '';
+  let markerStarted = false;
+  const emitVisible = (chunk: string, flush = false) => {
+    if (markerStarted) return;
+    pending += chunk;
+    const marker = pending.indexOf(CONFIRM_PREFIX);
+    if (marker >= 0) {
+      onDelta(pending.slice(0, marker));
+      pending = '';
+      markerStarted = true;
+      return;
+    }
+    const keep = flush ? 0 : CONFIRM_PREFIX.length - 1;
+    if (pending.length > keep) {
+      onDelta(pending.slice(0, pending.length - keep));
+      pending = pending.slice(-keep);
+    }
+  };
   const stream = await client.chat.completions.create({
     ...body,
     stream: true,
@@ -205,7 +280,7 @@ async function streamCompletion(
     if (!delta) continue;
     if (typeof delta.content === 'string' && delta.content) {
       text += delta.content;
-      onDelta(delta.content);
+      emitVisible(delta.content);
     }
     for (const toolCall of delta.tool_calls ?? []) {
       const index = typeof toolCall.index === 'number' ? toolCall.index : 0;
@@ -216,10 +291,16 @@ async function streamCompletion(
       calls.set(index, current);
     }
   }
+  emitVisible('', true);
   return {
     text,
     toolCalls: [...calls.values()].filter((call) => call.name),
   };
+}
+
+function visibleAssistantText(text: string): string {
+  const marker = text.indexOf(CONFIRM_PREFIX);
+  return (marker < 0 ? text : text.slice(0, marker)).trimEnd();
 }
 
 function toOpenAiHistory(
@@ -308,7 +389,10 @@ export async function runAgentTurn(
   const history = await store.listMessages(conversationId);
   const previousAssistant = [...history].reverse()
     .find((message) => message.role === 'assistant');
-  const armed = shouldArmDestructive(previousAssistant?.content ?? null, userText);
+  let authorization = destructiveAuthorization(
+    previousAssistant?.content ?? null,
+    userText,
+  );
   const summary = await runningSummary(conversationId, history, client, model);
   const { timezone } = await getSettings();
   const system = buildSystemPrompt(
@@ -327,7 +411,6 @@ export async function runAgentTurn(
     await store.touchConversation(conversationId, userText.slice(0, 60));
   }
 
-  const tools = projectTools(armed);
   let messages: Array<Record<string, unknown>> = [
     { role: 'system', content: system },
     ...toOpenAiHistory(history.slice(-HISTORY_WINDOW)),
@@ -341,6 +424,7 @@ export async function runAgentTurn(
       messages,
       reasoning_effort: effort,
     };
+    const tools = projectTools(authorization);
     if (tools.length) body.tools = tools;
     const completion = await streamCompletion(
       client,
@@ -348,7 +432,7 @@ export async function runAgentTurn(
       (text) => onEvent({ type: 'delta', text }),
     );
     if (completion.toolCalls.length === 0) {
-      finalText = completion.text;
+      finalText = visibleAssistantText(completion.text);
       await store.appendMessage({
         conversation_id: conversationId,
         role: 'assistant',
@@ -381,18 +465,19 @@ export async function runAgentTurn(
     }];
     for (const call of completion.toolCalls) {
       onEvent({ type: 'tool_start', name: call.name });
-      const result = await executeToolCall(call, armed);
+      const execution = await executeToolCall(call, authorization);
+      if (execution.consumed) authorization = null;
       onEvent({ type: 'tool_end', name: call.name });
       await store.appendMessage({
         conversation_id: conversationId,
         role: 'tool',
-        content: result,
+        content: execution.text,
         tool_calls: JSON.stringify([{ id: call.id, name: call.name }]),
       });
       messages = [...messages, {
         role: 'tool',
         tool_call_id: call.id,
-        content: result,
+        content: execution.text,
       }];
     }
     if (rounds >= MAX_TOOL_ROUNDS) {
@@ -401,7 +486,7 @@ export async function runAgentTurn(
         { model, messages, reasoning_effort: effort },
         (text) => onEvent({ type: 'delta', text }),
       );
-      finalText = forced.text;
+      finalText = visibleAssistantText(forced.text);
       await store.appendMessage({
         conversation_id: conversationId,
         role: 'assistant',

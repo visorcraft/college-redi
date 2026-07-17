@@ -33,6 +33,16 @@ describe('settings store', () => {
     expect(reread.wizard_state.completed).toBe(true);
   });
 
+  it('serializes concurrent patches so unrelated keys survive', async () => {
+    await Promise.all([
+      updateSettings({ timezone: 'America/Chicago' }),
+      updateSettings({ ai: { model: 'concurrent-model' } }),
+    ]);
+    const reread = await getSettings();
+    expect(reread.timezone).toBe('America/Chicago');
+    expect(reread.ai.model).toBe('concurrent-model');
+  });
+
   it('rejects invalid values', async () => {
     await expect(updateSettings({ ai: { effort: 'extreme' as never } })).rejects.toThrow();
     await expect(updateSettings({ imap: { poll_interval_minutes: 0 } })).rejects.toThrow();

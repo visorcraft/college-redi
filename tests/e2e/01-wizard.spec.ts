@@ -20,6 +20,8 @@ test('wizard happy path configures login, AI, checklist, and defaults', async ({
 
   await page.getByLabel('Password', { exact: true }).fill(E2E_PASSWORD);
   await page.getByLabel(/confirm password/i).fill(E2E_PASSWORD);
+  await page.getByLabel(/setup token/i)
+    .fill('e2e-setup-token-0123456789abcdef0123456789abcdef');
   await page.getByRole('button', { name: /create password/i }).click();
 
   await page.getByLabel(/base url/i).fill(STUB_AI_BASE_URL);

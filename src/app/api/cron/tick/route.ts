@@ -4,6 +4,8 @@ import { verifyPassword } from '../../../../server/password';
 import { getSecret } from '../../../../server/secrets';
 import { runNotificationDispatchJob } from '../../../../server/notify/jobs';
 import { runImapPollJob } from '../../../../server/email/imapJob';
+import { withLease } from '../../../../server/scheduler';
+import { runAudited } from '../../../../server/tools/call';
 
 export async function POST(req: NextRequest) {
   const secret = req.headers.get('x-redi-cron-secret');
@@ -23,12 +25,27 @@ export async function POST(req: NextRequest) {
       { status: 401 },
     );
   }
-  const summary = await runNotificationDispatchJob();
-  const imapPoll = await runImapPollJob(new Date());
-  return NextResponse.json({
-    ok: true,
-    ran: ['notification_dispatch'],
-    ...summary,
-    imapPoll,
+  return runAudited('cron', 'cron_tick', async () => {
+    const dispatch = await withLease(
+      'notification_dispatch',
+      55_000,
+      () => runNotificationDispatchJob(),
+    );
+    const imapPoll = await runImapPollJob(new Date());
+    const summary = dispatch.skipped ? null : dispatch.result;
+    return NextResponse.json({
+      ok: true,
+      ran: dispatch.skipped ? [] : ['notification_dispatch'],
+      skipped: dispatch.skipped,
+      ...(summary ?? {
+        due: 0,
+        sent: 0,
+        failed: 0,
+        awaiting_retry: 0,
+        held: 0,
+        reminders_enqueued: 0,
+      }),
+      imapPoll,
+    });
   });
 }

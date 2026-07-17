@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<Mode>('loading');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [setupToken, setSetupToken] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -40,7 +41,7 @@ export default function LoginPage() {
       const res = await fetch(mode === 'setup' ? '/api/auth/setup' : '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, ...(mode === 'setup' ? { setupToken } : {}) }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
       if (!res.ok) {
@@ -89,6 +90,26 @@ export default function LoginPage() {
                 className="w-full rounded-xl border border-[#1F2D50]/20 px-3 py-2 outline-none focus:border-[#1F2D50] focus:ring-2 focus:ring-[#1F2D50]/20"
               />
             </div>
+            {isSetup && (
+              <div>
+                <label htmlFor="setup-token" className="mb-1 block text-sm font-medium">
+                  Setup token
+                </label>
+                <input
+                  id="setup-token"
+                  name="setup-token"
+                  type="password"
+                  required
+                  autoComplete="off"
+                  value={setupToken}
+                  onChange={(e) => setSetupToken(e.target.value)}
+                  className="w-full rounded-xl border border-[#1F2D50]/20 px-3 py-2 outline-none focus:border-[#1F2D50] focus:ring-2 focus:ring-[#1F2D50]/20"
+                />
+                <p className="mt-1 text-xs text-[#1F2D50]/60">
+                  Find REDI_SETUP_TOKEN in DATA_DIR/.env.
+                </p>
+              </div>
+            )}
             {isSetup && (
               <div>
                 <label htmlFor="confirm" className="mb-1 block text-sm font-medium">

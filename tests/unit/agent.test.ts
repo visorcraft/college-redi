@@ -194,16 +194,20 @@ describe('Redi agent loop', () => {
 
   it('arms destructive tools only after an affirmative confirmation', async () => {
     const context = await boot([
-      { content: 'This deletes the task forever. Reply yes to confirm.' },
+      {
+        content: 'This deletes task t1 forever. Reply yes to confirm. ' +
+          '<!-- redi-confirm:{"tool":"delete_task","arguments":{"id":"t1"}} -->',
+      },
       { toolCalls: [{ name: 'delete_task', arguments: '{"id":"t1"}' }] },
       { content: 'Done, task deleted.' },
     ]);
     const conversation = await context.store.createConversation();
-    await context.agent.runAgentTurn(
+    const asked = await context.agent.runAgentTurn(
       conversation.id,
       'delete the transcript task',
       () => undefined,
     );
+    expect(asked.text).not.toContain('redi-confirm');
     const first = context.stub.requests[0] as unknown as StubRequest;
     expect(first.tools?.map((tool) => tool.function.name))
       .toEqual(['get_system_status', 'create_task']);
@@ -259,12 +263,39 @@ describe('Redi agent loop', () => {
 
   it('recognizes an explicit confirmation exchange', async () => {
     const { shouldArmDestructive } = await import('../../src/server/ai/agent');
-    expect(shouldArmDestructive('Shall I delete it? Reply yes to confirm.', 'yes'))
+    const exact = 'Shall I delete task t1? Reply yes to confirm. ' +
+      '<!-- redi-confirm:{"tool":"delete_task","arguments":{"id":"t1"}} -->';
+    expect(shouldArmDestructive(exact, 'yes'))
       .toBe(true);
-    expect(shouldArmDestructive('Shall I delete it? Reply yes to confirm.', 'no way'))
+    expect(shouldArmDestructive(exact, 'no way'))
       .toBe(false);
+    expect(shouldArmDestructive(
+      'Shall I delete it? Reply yes to confirm.',
+      'yes',
+    )).toBe(false);
     expect(shouldArmDestructive('Here is your task list.', 'yes')).toBe(false);
     expect(shouldArmDestructive(null, 'yes')).toBe(false);
+  });
+
+  it('rejects a destructive call whose arguments differ from confirmation', async () => {
+    const context = await boot([
+      {
+        content: 'Delete task t1? Reply yes to confirm. ' +
+          '<!-- redi-confirm:{"tool":"delete_task","arguments":{"id":"t1"}} -->',
+      },
+      { toolCalls: [{ name: 'delete_task', arguments: '{"id":"t2"}' }] },
+      { content: 'I need a new confirmation.' },
+    ]);
+    const conversation = await context.store.createConversation();
+    await context.agent.runAgentTurn(conversation.id, 'delete t1', () => undefined);
+    await context.agent.runAgentTurn(conversation.id, 'yes', () => undefined);
+    expect(context.callTool).not.toHaveBeenCalledWith(
+      'delete_task',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect((context.stub.requests[2] as unknown as StubRequest)
+      .messages.at(-1)?.content).toMatch(/do not match/i);
   });
 
   it('builds fresh snapshot and persona guardrails', async () => {

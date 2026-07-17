@@ -2,6 +2,7 @@ import { lit, sqlExec, sqlRows } from './db/sql';
 import { AppSettingsSchema, type AppSettings, type SettingsPatch } from '../lib/schemas/settings';
 
 const ROW_ID = 1;
+let updateTail: Promise<void> = Promise.resolve();
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -31,11 +32,16 @@ export async function getSettings(): Promise<AppSettings> {
   return AppSettingsSchema.parse(JSON.parse(row.payload));
 }
 
-export async function updateSettings(patch: SettingsPatch): Promise<AppSettings> {
-  const merged = AppSettingsSchema.parse(deepMerge(await getSettings(), patch));
-  await sqlExec(
-    `UPDATE app_settings SET payload = ${lit(JSON.stringify(merged))}, ` +
-    `updated_at = ${lit(new Date())} WHERE id = ${ROW_ID}`,
-  );
-  return merged;
+export function updateSettings(patch: SettingsPatch): Promise<AppSettings> {
+  // ponytail: one app process owns settings; use DB compare-and-swap if multi-app deployment arrives.
+  const pending = updateTail.then(async () => {
+    const merged = AppSettingsSchema.parse(deepMerge(await getSettings(), patch));
+    await sqlExec(
+      `UPDATE app_settings SET payload = ${lit(JSON.stringify(merged))}, ` +
+      `updated_at = ${lit(new Date())} WHERE id = ${ROW_ID}`,
+    );
+    return merged;
+  });
+  updateTail = pending.then(() => undefined, () => undefined);
+  return pending;
 }

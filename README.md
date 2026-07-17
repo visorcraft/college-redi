@@ -41,7 +41,8 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000 and finish the first-run wizard.
+Read `REDI_SETUP_TOKEN` from `./data/.env`, then open
+http://localhost:3000 and finish the first-run wizard.
 
 ### Daemon mode
 
@@ -57,7 +58,7 @@ docker compose -f docker-compose.daemon.yml up -d
 
 MongrelDB always uses AES-256-GCM encryption at rest and storage-level credential enforcement. Before startup, `scripts/bootstrap-env.sh` checks `$DATA_DIR/.env`:
 
-- If absent, it creates `MONGRELDB_DB_USERNAME`, a random 32-byte `MONGRELDB_DB_PASSWORD`, and a random 32-byte `MONGRELDB_PASSPHRASE`, then sets file mode `0600`. Values are never logged.
+- If absent, it creates `MONGRELDB_DB_USERNAME`, random 32-byte database credentials, and a one-time `REDI_SETUP_TOKEN`, then sets file mode `0600`. Values are never logged.
 - If present, it loads the file without overwriting it.
 
 > **Back up `.env` and `master.key`.** Without them, encrypted data is permanently unrecoverable.
@@ -77,7 +78,9 @@ Settings and the wizard handle normal configuration. Environment variables may p
 | `MONGRELDB_DB_PASSWORD` | *(generated)* | DB user password; 32-byte random, auto-generated into `.env` (§4.6) |
 | `MONGRELDB_PASSPHRASE` | *(generated)* | At-rest encryption passphrase; 32-byte random, auto-generated into `.env` (§4.6) |
 | `REDI_MASTER_KEY` | — (else keyfile) | 32-byte secret-encryption key |
+| `REDI_SETUP_TOKEN` | *(generated)* | One-time token required to claim a fresh installation |
 | `SESSION_SECRET` | — (else derived from master key) | Cookie HMAC key |
+| `TRUST_PROXY_HOPS` | `0` | Number of reverse proxies trusted to append `X-Forwarded-For` |
 | `SCHEDULER_ENABLED` | `true` | In-process scheduler on/off |
 | `CRON_SECRET` | — (generatable in UI) | `POST /api/cron/tick` shared secret |
 | `LOG_LEVEL` | `info` | |
@@ -125,7 +128,7 @@ There is no in-app backup machinery in v1.
 ## Security
 
 - Password and MCP token hashes use Argon2id. Sessions use HMAC-signed, httpOnly, `SameSite=Lax` cookies.
-- Mutating APIs enforce double-submit CSRF. Login locks for five minutes after five failures.
+- Mutating APIs enforce double-submit CSRF. Login locks each client for five minutes after five failures.
 - Application secrets use AES-256-GCM before database storage.
 - IMAP access is read-only. Raw email bodies are discarded after processing.
 - Logs omit secrets, email bodies, chat bodies, and AI prompt bodies.

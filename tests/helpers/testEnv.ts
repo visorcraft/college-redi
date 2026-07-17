@@ -11,6 +11,8 @@ const ENV_KEYS = [
   'MONGRELDB_PASSPHRASE',
   'REDI_MASTER_KEY',
   'SESSION_SECRET',
+  'REDI_SETUP_TOKEN',
+  'TRUST_PROXY_HOPS',
 ] as const;
 let previousEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
@@ -25,6 +27,9 @@ export async function setupTestEnv(prefix: string): Promise<string> {
   process.env.MONGRELDB_PASSPHRASE = 'test-passphrase';
   process.env.REDI_MASTER_KEY = 'a'.repeat(64);
   process.env.SESSION_SECRET = 'test-session-secret';
+  process.env.REDI_SETUP_TOKEN =
+    'test-setup-token-0123456789abcdef0123456789abcdef';
+  process.env.TRUST_PROXY_HOPS = '1';
 
   const { _resetDbForTests } = await import('../../src/server/db/client');
   const { _resetConfigForTests } = await import('../../src/server/config');

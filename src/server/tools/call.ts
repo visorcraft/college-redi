@@ -37,11 +37,30 @@ async function writeAudit(actor: string, toolName: string, detail: Record<string
   }
 }
 
+export async function runAudited<T>(
+  actor: string,
+  action: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const started = Date.now();
+  try {
+    const result = await fn();
+    await writeAudit(actor, action, { ok: true, duration_ms: Date.now() - started });
+    return result;
+  } catch (err) {
+    await writeAudit(actor, action, {
+      ok: false,
+      duration_ms: Date.now() - started,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
+}
+
 export async function callTool(name: string, params: unknown, ctx: ToolContext): Promise<unknown> {
   const tool = getTool(name);
   if (!tool) throw new ToolNotFoundError(name);
-  const started = Date.now();
-  try {
+  return runAudited(ctx.actor, name, async () => {
     const parsed = tool.paramsSchema.safeParse(params ?? {});
     if (!parsed.success) {
       throw new ToolValidationError(name, parsed.error.issues.map((i) => i.message).join('; '));
@@ -49,15 +68,6 @@ export async function callTool(name: string, params: unknown, ctx: ToolContext):
     if (tool.sideEffect === 'destructive' && (parsed.data as Record<string, unknown>).confirm !== true) {
       throw new ToolConfirmationRequiredError(name);
     }
-    const result = await tool.handler(ctx, parsed.data);
-    await writeAudit(ctx.actor, name, { ok: true, duration_ms: Date.now() - started });
-    return result;
-  } catch (err) {
-    await writeAudit(ctx.actor, name, {
-      ok: false,
-      duration_ms: Date.now() - started,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    throw err;
-  }
+    return tool.handler(ctx, parsed.data);
+  });
 }

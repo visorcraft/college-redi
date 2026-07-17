@@ -45,6 +45,7 @@ export default defineConfig({
         CRON_SECRET: 'e2e-cron-secret',
         REDI_MASTER_KEY: 'c'.repeat(64),
         SESSION_SECRET: 'e2e-session-secret',
+        REDI_SETUP_TOKEN: 'e2e-setup-token-0123456789abcdef0123456789abcdef',
         MONGRELDB_DB_USERNAME: 'redi',
         MONGRELDB_DB_PASSWORD: 'e2e-db-password',
         MONGRELDB_PASSPHRASE: 'e2e-db-passphrase',

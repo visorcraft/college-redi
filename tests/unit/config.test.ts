@@ -42,6 +42,12 @@ describe('getConfig', () => {
     await resetServerState();
     expect(() => getConfig()).toThrow();
   });
+
+  it('treats an empty optional setup token as unset', async () => {
+    process.env.REDI_SETUP_TOKEN = '';
+    await resetServerState();
+    expect(getConfig().REDI_SETUP_TOKEN).toBeUndefined();
+  });
 });
 
 describe('requireDbCredentials', () => {

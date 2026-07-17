@@ -23,7 +23,7 @@ describe('scripts/bootstrap-env.sh (spec §4.6)', () => {
       expect(result.stdout + result.stderr).not.toMatch(/MONGRELDB_PASSPHRASE=.{8}/);
       const content = readFileSync(path.join(dir, '.env'), 'utf8');
       expect(statSync(path.join(dir, '.env')).mode & 0o777).toBe(0o600);
-      for (const key of ['MONGRELDB_DB_USERNAME=redi', 'MONGRELDB_DB_PASSWORD=', 'MONGRELDB_PASSPHRASE=', 'DATABASE_MODE=embedded', 'MONGRELDB_URL=']) {
+      for (const key of ['MONGRELDB_DB_USERNAME=redi', 'MONGRELDB_DB_PASSWORD=', 'MONGRELDB_PASSPHRASE=', 'REDI_SETUP_TOKEN=', 'DATABASE_MODE=embedded', 'MONGRELDB_URL=']) {
         expect(content).toContain(key);
       }
       const password = /^MONGRELDB_DB_PASSWORD=(.+)$/m.exec(content)?.[1] ?? '';

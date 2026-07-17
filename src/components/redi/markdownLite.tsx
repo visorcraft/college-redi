@@ -2,6 +2,7 @@ import React from 'react';
 
 /** Render safe chat formatting without accepting raw HTML. */
 export function renderMarkdownLite(text: string): React.ReactNode {
+  text = text.replace(/<!-- redi-confirm:[\s\S]*?(?:-->|$)/g, '').trimEnd();
   const blocks: React.ReactNode[] = [];
   let bullets: React.ReactNode[] = [];
 

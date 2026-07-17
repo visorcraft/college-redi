@@ -6,6 +6,7 @@ import { getSecret } from '../secrets';
 import { getSettings } from '../settings';
 import { isSchedulerAlive } from '../scheduler';
 import { sqlRows } from '../db/sql';
+import { getAiUsageStatus } from '../ai/client';
 import { defineTool, registerTool, type Tool } from './registry';
 
 export const getSystemStatusTool: Tool = defineTool({
@@ -37,6 +38,7 @@ export const getSystemStatusTool: Tool = defineTool({
       getSecret('smtp.password'),
       getSecret('twilio.auth_token'),
     ]);
+    const aiUsage = await getAiUsageStatus();
     return {
       db: dbStatus,
       ai: {
@@ -44,6 +46,8 @@ export const getSystemStatusTool: Tool = defineTool({
         base_url: settings.ai.base_url,
         model: settings.ai.model,
         effort: settings.ai.effort,
+        calls_today: aiUsage.callsToday,
+        daily_cap: aiUsage.dailyCap,
       },
       imap: {
         configured: settings.imap.host.length > 0 && imapPassword !== null,

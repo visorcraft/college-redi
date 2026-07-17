@@ -22,6 +22,8 @@ export async function startTestServer(): Promise<RunningServer> {
       MONGRELDB_DB_PASSWORD: 'it-db-password-0123456789abcdef',
       MONGRELDB_PASSPHRASE: 'it-passphrase-0123456789abcdef',
       SESSION_SECRET: 'it-session-secret',
+      REDI_SETUP_TOKEN: 'it-setup-token-0123456789abcdef0123456789abcdef',
+      TRUST_PROXY_HOPS: '1',
       SCHEDULER_ENABLED: 'false',
       NEXT_TELEMETRY_DISABLED: '1',
     },

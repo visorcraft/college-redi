@@ -40,6 +40,8 @@ describe('mark/unmark_course_completed', () => {
   it('records completion with course defaults and upserts on the unique key', async () => {
     const pid = await seedProgram();
     const cid = await seedCourse(pid, 'CS 101', { credits: 4 });
+    const otherPid = await seedProgram({ name: 'Other program' });
+    const otherCourse = await seedCourse(otherPid, 'BIO 101');
     const row = await call('mark_course_completed', { program_id: pid, course_id: cid, term: 'Fall 2024', year: 2024, grade: 'a-' }) as { id: string; credits: number; status: string; source: string };
     expect(row.credits).toBe(4);
     expect(row.status).toBe('completed');
@@ -48,6 +50,7 @@ describe('mark/unmark_course_completed', () => {
     expect(again.id).toBe(row.id);
     expect(again.grade).toBe('A');
     await expect(call('mark_course_completed', { program_id: pid, course_id: crypto.randomUUID(), term: 'Fall 2024', year: 2024 })).rejects.toMatchObject({ code: 'not_found' });
+    await expect(call('mark_course_completed', { program_id: pid, course_id: otherCourse, term: 'Fall 2024', year: 2024 })).rejects.toMatchObject({ code: 'conflict' });
     await call('unmark_course_completed', { id: row.id });
     await expect(call('unmark_course_completed', { id: row.id })).rejects.toMatchObject({ code: 'not_found' });
   });
@@ -67,11 +70,14 @@ describe('plan/update/remove planned courses', () => {
   it('plans, enforces uniqueness + FKs, updates status, removes with confirm', async () => {
     const pid = await seedProgram();
     const cid = await seedCourse(pid, 'CS 201');
+    const otherPid = await seedProgram({ name: 'Other plan' });
+    const otherCourse = await seedCourse(otherPid, 'BIO 201');
     const tid = await seedTerm('Fall 2026');
     const planned = await call('plan_course', { program_id: pid, course_id: cid, term_id: tid, section: 'A01' }) as { id: string; status: string };
     expect(planned.status).toBe('planned');
     await expect(call('plan_course', { program_id: pid, course_id: cid, term_id: tid })).rejects.toMatchObject({ code: 'conflict' });
     await expect(call('plan_course', { program_id: pid, course_id: cid, term_id: crypto.randomUUID() })).rejects.toMatchObject({ code: 'not_found' });
+    await expect(call('plan_course', { program_id: pid, course_id: otherCourse, term_id: tid })).rejects.toMatchObject({ code: 'conflict' });
     const updated = await call('update_planned_course', { id: planned.id, status: 'registered', section: 'B02' }) as { status: string; section: string };
     expect(updated.status).toBe('registered');
     expect(updated.section).toBe('B02');

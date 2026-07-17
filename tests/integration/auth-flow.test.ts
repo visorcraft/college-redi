@@ -52,7 +52,10 @@ describe('auth flow (booted app, temp data dir)', () => {
     const res = await fetch(`${srv.baseUrl}/api/auth/setup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: PASSWORD }),
+      body: JSON.stringify({
+        password: PASSWORD,
+        setupToken: 'it-setup-token-0123456789abcdef0123456789abcdef',
+      }),
     });
     expect(res.status).toBe(200);
     jarFrom(res, jar);

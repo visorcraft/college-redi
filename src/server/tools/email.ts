@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { triageMessages } from '../ai/triage';
 import { createImapSource } from '../email/imapClient';
-import { categoryForEventType, recordTriageResult, runEmailPipeline } from '../email/pipeline';
+import {
+  categoryForEventType,
+  dismissLinkedTasksForEmail,
+  recordTriageResult,
+  runEmailPipeline,
+} from '../email/pipeline';
 import * as store from '../email/store';
 import { getSettings } from '../settings';
 import { ConflictError, NotFoundError, ToolError } from './errors';
@@ -88,11 +93,14 @@ const reclassify_email = defineTool({
     const row = await store.getProcessedEmail(params.id);
     if (!row) throw new NotFoundError(`email ${params.id} not found`);
     if (params.classification === 'junk') {
-      await store.deleteExtractedEventsForEmail(row.id);
-      await store.updateProcessedEmail(row.id, {
-        classification: 'junk',
-        summary: null,
-        extracted_count: 0,
+      await store.withTransaction(async () => {
+        await dismissLinkedTasksForEmail(row.id, context.actor);
+        await store.deleteExtractedEventsForEmail(row.id);
+        await store.updateProcessedEmail(row.id, {
+          classification: 'junk',
+          summary: null,
+          extracted_count: 0,
+        });
       });
       return { email: await store.getProcessedEmail(row.id), events: [] };
     }

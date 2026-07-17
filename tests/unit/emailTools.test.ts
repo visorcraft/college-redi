@@ -215,6 +215,50 @@ describe('processed email tools', () => {
     expect(engineMock.enqueueNotification).toHaveBeenCalled();
   });
 
+  it('dismisses linked tasks and replaces events without duplicates', async () => {
+    const emailId = await store.insertProcessedEmail({
+      mailbox: 'INBOX',
+      uid: 7,
+      uidvalidity: 1,
+      message_id: '<reg-2026-041@stateu.edu>',
+      from_addr: 'registrar@stateu.edu',
+      subject: 'Registration for Fall 2026 closes Friday',
+      received_at: '2026-07-14T13:30:00.000Z',
+      classification: 'actionable',
+      summary: 'Old summary',
+      extracted_count: 1,
+      notified: true,
+      processed_at: null,
+    });
+    await store.insertExtractedEvent({
+      email_id: emailId,
+      title: 'Old deadline',
+      event_type: 'registration',
+      due_at: '2026-07-20T21:00:00.000Z',
+      confidence: 0.95,
+      status: 'accepted',
+      task_id: 'old-task',
+    });
+    callMock.callTool.mockClear();
+
+    await invoke('reclassify_email', {
+      id: emailId,
+      classification: 'actionable',
+    });
+    expect(callMock.callTool).toHaveBeenCalledWith(
+      'dismiss_task',
+      { id: 'old-task' },
+      context,
+    );
+    expect(await store.listExtractedEventsForEmail(emailId)).toHaveLength(1);
+
+    await invoke('reclassify_email', {
+      id: emailId,
+      classification: 'actionable',
+    });
+    expect(await store.listExtractedEventsForEmail(emailId)).toHaveLength(1);
+  });
+
   it('reclassifies to junk and clears summary and events', async () => {
     const emailId = await store.insertProcessedEmail({
       mailbox: 'INBOX',

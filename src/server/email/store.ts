@@ -4,6 +4,22 @@ import { lit, sqlExec, sqlRows } from '../db/sql';
 export const rows = sqlRows;
 export const exec = sqlExec;
 
+export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  await exec('BEGIN');
+  try {
+    const result = await fn();
+    await exec('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      await exec('ROLLBACK');
+    } catch {
+      // The database may already have aborted the transaction.
+    }
+    throw error;
+  }
+}
+
 const num = (value: unknown): number =>
   typeof value === 'bigint' ? Number(value) : Number(value ?? 0);
 

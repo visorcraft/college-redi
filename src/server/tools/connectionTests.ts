@@ -17,7 +17,7 @@ const testAiConnection = {
   name: 'test_ai_connection',
   description:
     'Ping the configured AI provider with a trivial completion and verify tool-calling support. Returns model, latency, and whether the model can call tools (Redi chat is degraded to Q&A without it).',
-  sideEffect: 'read' as const,
+  sideEffect: 'write' as const,
   paramsSchema: z.object({}).strict(),
   jsonSchema: EMPTY_JSON_SCHEMA,
   async handler() {
@@ -163,7 +163,7 @@ const HELLO_BODY = "Hi! It's Redi ☁️ — your setup worked. I'll send your c
 const testSmtpConnection = {
   name: 'test_smtp_connection',
   description: 'Verify the personal SMTP account and send a real "hello from Redi" test email to the configured personal address.',
-  sideEffect: 'read' as const,
+  sideEffect: 'write' as const,
   paramsSchema: z.object({}).strict(),
   jsonSchema: EMPTY_JSON_SCHEMA,
   async handler() {
@@ -174,7 +174,7 @@ const testSmtpConnection = {
 const testTwilioConnection = {
   name: 'test_twilio_connection',
   description: 'Validate Twilio credentials and send a test SMS to the student\'s mobile number.',
-  sideEffect: 'read' as const,
+  sideEffect: 'write' as const,
   paramsSchema: z.object({}).strict(),
   jsonSchema: EMPTY_JSON_SCHEMA,
   async handler() {

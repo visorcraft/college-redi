@@ -12,6 +12,7 @@ let setSecret: (name: string, value: string) => Promise<void>;
 let enqueue: typeof import('../../src/server/notify/engine').enqueueNotification;
 let updateSettings: (patch: Record<string, unknown>) => Promise<unknown>;
 let sqlExec: (sql: string) => Promise<void>;
+let sqlRows: <T = Record<string, unknown>>(sql: string) => Promise<T[]>;
 
 const request = (secret?: string) => new NextRequest('http://localhost/api/cron/tick', {
   method: 'POST',
@@ -24,7 +25,7 @@ beforeAll(async () => {
   ({ setSecret } = await import('../../src/server/secrets'));
   ({ enqueueNotification: enqueue } = await import('../../src/server/notify/engine'));
   ({ updateSettings } = await import('../../src/server/settings'));
-  ({ sqlExec } = await import('../../src/server/db/sql'));
+  ({ sqlExec, sqlRows } = await import('../../src/server/db/sql'));
   await updateSettings({
     timezone: 'UTC',
     quiet_hours: { start: '22:00', end: '08:00' },
@@ -65,5 +66,8 @@ describe('POST /api/cron/tick', () => {
       ran: ['notification_dispatch'],
       sent: 1,
     });
+    expect((await sqlRows<{ actor: string; tool_name: string }>(
+      `SELECT actor, tool_name FROM audit_log WHERE tool_name = 'cron_tick'`,
+    ))[0]).toEqual({ actor: 'cron', tool_name: 'cron_tick' });
   });
 });

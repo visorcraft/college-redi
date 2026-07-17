@@ -12,6 +12,10 @@ const ConfigSchema = z.object({
   MONGRELDB_DB_PASSWORD: z.string().min(1).optional(),
   MONGRELDB_PASSPHRASE: z.string().min(1).optional(),
   REDI_MASTER_KEY: z.string().min(1).optional(),
+  REDI_SETUP_TOKEN: z.preprocess(
+    (value) => value === '' ? undefined : value,
+    z.string().min(32).optional(),
+  ),
   SESSION_SECRET: z.string().min(1).optional(),
   SCHEDULER_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   CRON_SECRET: z.string().min(1).optional(),

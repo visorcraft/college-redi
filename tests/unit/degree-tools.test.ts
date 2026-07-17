@@ -87,9 +87,12 @@ describe('program tools', () => {
 describe('requirement tools', () => {
   it('enforces type-specific shape rules', async () => {
     const pid = await seedProgram();
+    const otherPid = await seedProgram({ name: 'Other program' });
+    const otherCourse = await seedCourse(otherPid, 'BIO 101');
     await expect(call('add_requirement', { program_id: pid, type: 'course', group_name: 'Core' })).rejects.toMatchObject({ code: 'bad_request' });
     await expect(call('add_requirement', { program_id: pid, type: 'credit_bucket', group_name: 'Hum', credits_required: 6 })).rejects.toMatchObject({ code: 'bad_request' });
     await expect(call('add_requirement', { program_id: pid, type: 'course', course_id: crypto.randomUUID(), group_name: 'Core' })).rejects.toMatchObject({ code: 'not_found' });
+    await expect(call('add_requirement', { program_id: pid, type: 'course', course_id: otherCourse, group_name: 'Core' })).rejects.toMatchObject({ code: 'conflict' });
     await expect(call('add_requirement', { program_id: crypto.randomUUID(), type: 'milestone', group_name: 'X' })).rejects.toMatchObject({ code: 'not_found' });
   });
 

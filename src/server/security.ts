@@ -25,7 +25,7 @@ export function applySecurityHeaders(
     'Content-Security-Policy',
     contentSecurityPolicy(nonce),
   );
-  if (request.headers.get('x-forwarded-proto') === 'https') {
+  if (isSecureRequest(request)) {
     response.headers.set(
       'Strict-Transport-Security',
       'max-age=31536000; includeSubDomains',
@@ -68,13 +68,14 @@ export function ensureCsrfCookie(
       httpOnly: false,
       sameSite: 'lax',
       path: '/',
-      secure: request.headers.get('x-forwarded-proto') === 'https',
+      secure: isSecureRequest(request),
     });
   }
   return response;
 }
 
 const buckets = new Map<string, { count: number; resetAt: number }>();
+const MAX_BUCKETS = 10_000;
 
 export function rateLimitExceeded(
   key: string,
@@ -84,6 +85,14 @@ export function rateLimitExceeded(
 ): boolean {
   const bucket = buckets.get(key);
   if (!bucket || bucket.resetAt <= now) {
+    if (buckets.size >= MAX_BUCKETS) {
+      for (const [candidate, value] of buckets) {
+        if (value.resetAt <= now) buckets.delete(candidate);
+      }
+      while (buckets.size >= MAX_BUCKETS) {
+        buckets.delete(buckets.keys().next().value as string);
+      }
+    }
     buckets.set(key, { count: 1, resetAt: now + windowMs });
     return false;
   }
@@ -103,9 +112,34 @@ export function rateLimitResponse(): NextResponse {
   );
 }
 
-export function clientIp(request: NextRequest): string {
-  return (request.headers.get('x-forwarded-for') ?? '')
-    .split(',')[0]?.trim() || 'local';
+export function _rateLimitBucketCountForTests(): number {
+  return buckets.size;
+}
+
+export function clientIp(
+  request: NextRequest,
+  trustedProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0),
+): string | null {
+  const direct = (request as NextRequest & { ip?: string }).ip?.trim();
+  if (!Number.isInteger(trustedProxyHops) || trustedProxyHops < 1) {
+    return direct || null;
+  }
+  const chain = (request.headers.get('x-forwarded-for') ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return chain[Math.max(0, chain.length - trustedProxyHops)] ?? direct ?? null;
+}
+
+export function isSecureRequest(request: NextRequest): boolean {
+  if (request.nextUrl.protocol === 'https:') return true;
+  const trustedProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  if (!Number.isInteger(trustedProxyHops) || trustedProxyHops < 1) return false;
+  return (request.headers.get('x-forwarded-proto') ?? '')
+    .split(',')
+    .at(-1)
+    ?.trim()
+    .toLowerCase() === 'https';
 }
 
 export const RATE_LIMITS = {

@@ -66,6 +66,18 @@ beforeEach(() => {
   mocks.messagesCreate.mockResolvedValue({ sid: 'SM1' });
 });
 
+it('marks quota-spending and message-sending tests as writes', () => {
+  expect(Object.fromEntries(connectionTestTools.map((item) => [
+    item.name,
+    item.sideEffect,
+  ]))).toMatchObject({
+    test_ai_connection: 'write',
+    test_imap_connection: 'read',
+    test_smtp_connection: 'write',
+    test_twilio_connection: 'write',
+  });
+});
+
 describe('test_ai_connection', () => {
   it('reports not_configured when the AI client is not set up', async () => {
     const { AiNotConfiguredError } = await import('@/server/ai/client');

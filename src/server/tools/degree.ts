@@ -14,7 +14,7 @@ import {
 import {
   COMPLETED_COLS, COURSE_COLS, PROGRAM_COLS, REQUIREMENT_COLS, assertCourseCodeFree,
   assertPlannedFree, courseRefCounts, deleteWhere, getCompletedOrThrow, getCourseOrThrow,
-  getPlannedOrThrow, getProgramOrThrow, getRequirementOrThrow, getTermOrThrow, insertRow,
+  getCourseForProgramOrThrow, getPlannedOrThrow, getProgramOrThrow, getRequirementOrThrow, getTermOrThrow, insertRow,
   lit, newId, nowIso, sqlAll, sqlOne, toCourse, toRequirement, updateRow, withTransaction,
   type CompletedRow, type ProgramRow,
 } from '../degree/repo';
@@ -134,7 +134,7 @@ const add_requirement = def({
   handler: async (p) => {
     await getProgramOrThrow(p.program_id);
     validateRequirementShape(p);
-    if (p.course_id) await getCourseOrThrow(p.course_id);
+    if (p.course_id) await getCourseForProgramOrThrow(p.program_id, p.course_id);
     const sort_order = p.sort_order
       ?? (await sqlOne<{ next_sort: number }>(`SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort FROM requirements WHERE program_id = ${lit(p.program_id)}`))!.next_sort;
     const id = newId();
@@ -158,7 +158,9 @@ const update_requirement = def({
     const { id, bucket_rule, ...rest } = p;
     const merged = { ...existing, ...defined(rest), ...(bucket_rule !== undefined ? { bucket_rule } : {}) };
     validateRequirementShape(merged);
-    if (merged.course_id) await getCourseOrThrow(merged.course_id);
+    if (merged.course_id) {
+      await getCourseForProgramOrThrow(existing.program_id, merged.course_id);
+    }
     await updateRow('requirements', id, {
       ...defined(rest),
       ...(bucket_rule !== undefined ? { bucket_rule: bucket_rule ? JSON.stringify(bucket_rule) : null } : {}),
@@ -259,7 +261,7 @@ const mark_course_completed = def({
   paramsSchema: MarkCompletedParams,
   handler: async (p) => {
     await getProgramOrThrow(p.program_id);
-    const course = await getCourseOrThrow(p.course_id);
+    const course = await getCourseForProgramOrThrow(p.program_id, p.course_id);
     const existing = await sqlOne<CompletedRow>(
       `SELECT ${COMPLETED_COLS} FROM completed_courses WHERE program_id = ${lit(p.program_id)} AND course_id = ${lit(p.course_id)} AND term = ${lit(p.term)} AND year = ${p.year}`);
     const values = {
@@ -300,7 +302,7 @@ const plan_course = def({
   paramsSchema: PlanCourseParams,
   handler: async (p) => {
     await getProgramOrThrow(p.program_id);
-    await getCourseOrThrow(p.course_id);
+    await getCourseForProgramOrThrow(p.program_id, p.course_id);
     await getTermOrThrow(p.term_id);
     await assertPlannedFree(p.program_id, p.course_id, p.term_id);
     const id = newId();

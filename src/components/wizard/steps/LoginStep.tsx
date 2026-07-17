@@ -9,6 +9,7 @@ export function LoginStep({ hasPassword, onComplete, busy }: {
 }) {
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
+  const [setupToken, setSetupToken] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   if (hasPassword) {
@@ -26,7 +27,10 @@ export function LoginStep({ hasPassword, onComplete, busy }: {
     if (pw1.length < 8) { setError('Use at least 8 characters.'); return; }
     if (pw1 !== pw2) { setError("Those don't match — try again."); return; }
     try {
-      await apiFetch('/api/auth/setup', { method: 'POST', body: { password: pw1 } });
+      await apiFetch('/api/auth/setup', {
+        method: 'POST',
+        body: { password: pw1, setupToken },
+      });
       await onComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -38,6 +42,7 @@ export function LoginStep({ hasPassword, onComplete, busy }: {
       <h1 className="text-xl font-semibold text-[#1F2D50]">Your login</h1>
       <PasswordField label="Password" value={pw1} onChange={setPw1} hint="At least 8 characters. Stored as an Argon2id hash, never in plain text." />
       <PasswordField label="Confirm password" value={pw2} onChange={setPw2} />
+      <PasswordField label="Setup token" value={setupToken} onChange={setSetupToken} hint="Find REDI_SETUP_TOKEN in DATA_DIR/.env." />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <PrimaryButton onClick={save} disabled={busy}>Create password</PrimaryButton>
     </div>

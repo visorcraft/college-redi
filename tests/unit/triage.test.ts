@@ -81,6 +81,56 @@ describe('triageMessages', () => {
     expect(result.ok).toBe(false);
   });
 
+  it.each([
+    {
+      name: 'missing',
+      results: [{
+        index: 0,
+        classification: 'junk',
+        summary: 's',
+        importance: 'low',
+        events: [],
+        rationale: 'r',
+      }],
+    },
+    {
+      name: 'duplicate',
+      results: [0, 0].map((index) => ({
+        index,
+        classification: 'junk',
+        summary: 's',
+        importance: 'low',
+        events: [],
+        rationale: 'r',
+      })),
+    },
+    {
+      name: 'out-of-range',
+      results: [0, 2].map((index) => ({
+        index,
+        classification: 'junk',
+        summary: 's',
+        importance: 'low',
+        events: [],
+        rationale: 'r',
+      })),
+    },
+  ])('rejects $name result indexes for a two-message batch', async ({
+    results,
+  }) => {
+    const invalid = JSON.stringify({ results });
+    const outcomes = await triageMessages(
+      [message(), message()],
+      {
+        completer: completer([invalid, invalid]),
+        timezone: 'UTC',
+        now: new Date(),
+      },
+    );
+    expect(outcomes).toHaveLength(2);
+    expect(outcomes.every((outcome) => !outcome.ok)).toBe(true);
+  });
+
   it('keeps due_at null for ambiguous dates', async () => {
     const result = (await triageMessages([message()], {
       completer: completer([ambiguousDateResultJson]),
@@ -114,7 +164,17 @@ describe('triageMessages', () => {
         rationale: 'r',
       })),
     });
-    const recording = completer([ten, ten]);
+    const two = JSON.stringify({
+      results: Array.from({ length: 2 }, (_, index) => ({
+        index,
+        classification: 'junk',
+        summary: 's',
+        importance: 'low',
+        events: [],
+        rationale: 'r',
+      })),
+    });
+    const recording = completer([ten, two]);
     const results = await triageMessages(
       Array.from({ length: 12 }, () => message()),
       { completer: recording, timezone: 'UTC', now: new Date() },

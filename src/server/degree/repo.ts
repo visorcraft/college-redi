@@ -118,6 +118,13 @@ export async function getCourseOrThrow(id: string): Promise<CourseRow> {
   if (!row) throw new NotFoundError(`course ${id} not found`);
   return toCourse(row);
 }
+export async function getCourseForProgramOrThrow(programId: string, courseId: string): Promise<CourseRow> {
+  const course = await getCourseOrThrow(courseId);
+  if (course.program_id !== programId) {
+    throw new ConflictError(`course ${course.code} does not belong to program ${programId}`);
+  }
+  return course;
+}
 export async function getCompletedOrThrow(id: string): Promise<CompletedRow> {
   const row = await sqlOne<CompletedRow>(`SELECT ${COMPLETED_COLS} FROM completed_courses WHERE id = ${lit(id)}`);
   if (!row) throw new NotFoundError(`completed course ${id} not found`);

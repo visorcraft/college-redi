@@ -111,10 +111,19 @@ async function triageBatch(
     const raw = await completer.complete(prompt.system, user);
     try {
       const parsed = batchResponseSchema.parse(extractJson(raw));
+      const indexes = parsed.results.map((result) => result.index);
+      if (
+        parsed.results.length !== messages.length
+        || new Set(indexes).size !== indexes.length
+        || indexes.some((index) => index >= messages.length)
+        || messages.some((_, index) => !indexes.includes(index))
+      ) {
+        throw new Error(
+          `result indexes must contain each input index exactly once (0-${messages.length - 1})`,
+        );
+      }
       return messages.map((_, index) => {
-        const hit = parsed.results.find((result) => result.index === index)
-          ?? parsed.results[index];
-        if (!hit) return { ok: false, error: `no result for index ${index}` };
+        const hit = parsed.results.find((result) => result.index === index)!;
         return { ok: true, result: triageResultSchema.parse(hit) };
       });
     } catch (error) {

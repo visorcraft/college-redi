@@ -58,6 +58,20 @@ interface PendingAi {
   existingId: string | null;
 }
 
+export async function dismissLinkedTasksForEmail(
+  emailId: string,
+  actor: string,
+): Promise<void> {
+  const taskIds = new Set(
+    (await store.listExtractedEventsForEmail(emailId))
+      .map((event) => event.task_id)
+      .filter((id): id is string => id !== null),
+  );
+  for (const id of taskIds) {
+    await callTool('dismiss_task', { id }, { actor });
+  }
+}
+
 /** Persist one triaged message and any events, tasks, and summary notification. */
 export async function recordTriageResult(
   base: {
@@ -73,86 +87,92 @@ export async function recordTriageResult(
   result: TriageResult,
   deps: { now: Date; actor: string; autoAccept: boolean },
 ): Promise<{ id: string; notified: boolean }> {
-  const shouldAccept = (confidence: number, dueAt: string | null) =>
-    deps.autoAccept && confidence >= 0.9 && dueAt !== null;
+  const persist = async () => {
+    const shouldAccept = (confidence: number, dueAt: string | null) =>
+      deps.autoAccept && confidence >= 0.9 && dueAt !== null;
 
-  const id = base.id ?? await store.insertProcessedEmail({
-    mailbox: base.mailbox,
-    uid: base.uid,
-    uidvalidity: base.uidvalidity,
-    message_id: base.message_id,
-    from_addr: base.from_addr,
-    subject: base.subject,
-    received_at: base.received_at,
-    classification: result.classification,
-    summary: result.summary,
-    extracted_count: 0,
-    notified: false,
-    processed_at: null,
-  });
-  if (base.id) await store.deleteExtractedEventsForEmail(id);
-
-  const events: store.ExtractedEventRow[] = [];
-  for (const event of result.events) {
-    const accepted = shouldAccept(event.confidence, event.due_at);
-    let taskId: string | null = null;
-    if (accepted) {
-      const task = await callTool('create_task', {
-        title: event.title,
-        description: `From email "${base.subject}" (${base.from_addr}): ${result.summary}`,
-        category: categoryForEventType(event.event_type),
-        due_at: event.due_at,
-        source: 'email',
-        source_email_id: id,
-      }, { actor: deps.actor }) as { id: string };
-      taskId = task.id;
-    }
-    const eventId = await store.insertExtractedEvent({
-      email_id: id,
-      title: event.title,
-      event_type: event.event_type,
-      due_at: event.due_at,
-      confidence: event.confidence,
-      status: accepted ? 'accepted' : 'pending_review',
-      task_id: taskId,
+    const id = base.id ?? await store.insertProcessedEmail({
+      mailbox: base.mailbox,
+      uid: base.uid,
+      uidvalidity: base.uidvalidity,
+      message_id: base.message_id,
+      from_addr: base.from_addr,
+      subject: base.subject,
+      received_at: base.received_at,
+      classification: result.classification,
+      summary: result.summary,
+      extracted_count: 0,
+      notified: false,
+      processed_at: null,
     });
-    const stored = await store.getExtractedEvent(eventId);
-    if (stored) events.push(stored);
-  }
-
-  let notified = false;
-  if (result.classification === 'actionable') {
-    try {
-      const { forwardActionableSummary } = await import('./forward');
-      await forwardActionableSummary(
-        {
-          id,
-          subject: base.subject,
-          from_addr: base.from_addr,
-          summary: result.summary,
-        },
-        events,
-        result.importance,
-        deps.now,
-      );
-      notified = true;
-    } catch (error) {
-      console.warn(JSON.stringify({
-        level: 'warn',
-        msg: 'email summary notification enqueue failed',
-        email_id: id,
-        error: error instanceof Error ? error.message : String(error),
-      }));
+    if (base.id) {
+      await dismissLinkedTasksForEmail(id, deps.actor);
+      await store.deleteExtractedEventsForEmail(id);
     }
-  }
-  await store.updateProcessedEmail(id, {
-    classification: result.classification,
-    summary: result.summary,
-    extracted_count: result.events.length,
-    notified,
-    processed_at: deps.now.toISOString(),
-  });
-  return { id, notified };
+
+    const events: store.ExtractedEventRow[] = [];
+    for (const event of result.events) {
+      const accepted = shouldAccept(event.confidence, event.due_at);
+      let taskId: string | null = null;
+      if (accepted) {
+        const task = await callTool('create_task', {
+          title: event.title,
+          description: `From email "${base.subject}" (${base.from_addr}): ${result.summary}`,
+          category: categoryForEventType(event.event_type),
+          due_at: event.due_at,
+          source: 'email',
+          source_email_id: id,
+        }, { actor: deps.actor }) as { id: string };
+        taskId = task.id;
+      }
+      const eventId = await store.insertExtractedEvent({
+        email_id: id,
+        title: event.title,
+        event_type: event.event_type,
+        due_at: event.due_at,
+        confidence: event.confidence,
+        status: accepted ? 'accepted' : 'pending_review',
+        task_id: taskId,
+      });
+      const stored = await store.getExtractedEvent(eventId);
+      if (stored) events.push(stored);
+    }
+
+    let notified = false;
+    if (result.classification === 'actionable') {
+      try {
+        const { forwardActionableSummary } = await import('./forward');
+        await forwardActionableSummary(
+          {
+            id,
+            subject: base.subject,
+            from_addr: base.from_addr,
+            summary: result.summary,
+          },
+          events,
+          result.importance,
+          deps.now,
+        );
+        notified = true;
+      } catch (error) {
+        console.warn(JSON.stringify({
+          level: 'warn',
+          msg: 'email summary notification enqueue failed',
+          email_id: id,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      }
+    }
+    await store.updateProcessedEmail(id, {
+      classification: result.classification,
+      summary: result.summary,
+      extracted_count: result.events.length,
+      notified,
+      processed_at: deps.now.toISOString(),
+    });
+    return { id, notified };
+  };
+  return base.id ? store.withTransaction(persist) : persist();
 }
 
 const emptyResult = (): PipelineResult => ({
