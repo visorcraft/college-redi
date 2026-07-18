@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { readSessionToken, SESSION_COOKIE } from '@/server/auth';
 import { ensureBootstrapped } from '@/server/bootstrap';
+import { getConfig } from '@/server/config';
 import { getSecret } from '@/server/secrets';
 import { getSettings } from '@/server/settings';
 
@@ -11,9 +12,11 @@ export async function GET(req: NextRequest) {
   const { valid } = await readSessionToken(req.cookies.get(SESSION_COOKIE)?.value);
   const passwordSet = (await getSecret('login.password_hash')) !== null;
   const settings = await getSettings();
+  const setupToken = passwordSet ? undefined : getConfig().REDI_SETUP_TOKEN;
   return NextResponse.json({
     authenticated: valid,
     passwordSet,
     wizardCompleted: settings.wizard_state.completed,
+    setupToken,
   });
 }

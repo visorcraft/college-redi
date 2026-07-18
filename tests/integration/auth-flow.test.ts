@@ -48,8 +48,11 @@ describe('auth flow (booted app, temp data dir)', () => {
 
   it('GET /api/auth/me reports setup state before and after setup', async () => {
     const before = await (await fetch(`${srv.baseUrl}/api/auth/me`)).json();
-    expect(before).toMatchObject({ authenticated: false, passwordSet: false });
-    expect(before).not.toHaveProperty('setupToken');
+    expect(before).toMatchObject({
+      authenticated: false,
+      passwordSet: false,
+      setupToken: 'it-setup-token-0123456789abcdef0123456789abcdef',
+    });
     const res = await fetch(`${srv.baseUrl}/api/auth/setup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -64,6 +67,7 @@ describe('auth flow (booted app, temp data dir)', () => {
     expect(jar.get('redi_csrf')).toBeTruthy();
     const after = await (await fetch(`${srv.baseUrl}/api/auth/me`, { headers: { cookie: cookieHeader(jar) } })).json();
     expect(after).toMatchObject({ authenticated: true, passwordSet: true, wizardCompleted: false });
+    expect(after).not.toHaveProperty('setupToken');
   });
 
   it('POST /api/auth/setup is closed once a password exists', async () => {
