@@ -28,13 +28,52 @@ test('wizard happy path configures login, AI, checklist, and defaults', async ({
   await page.getByRole('button', { name: /test connection/i }).click();
   await expect(page.getByText(/connected|success|working|looks good/i).first())
     .toBeVisible();
+  const unsavedSettings = await (await page.request.get('/api/settings')).json();
+  const unsavedStatus = await (await page.request.get('/api/redi/status')).json();
+  expect(unsavedSettings.ai.base_url).not.toBe(STUB_AI_BASE_URL);
+  expect(unsavedStatus.aiConfigured).toBe(false);
   await page.getByRole('button', { name: /save.*continue/i }).click();
 
-  for (let step = 4; step <= 6; step += 1) {
-    await expect(page.getByText(new RegExp(`Step ${step} of 10`))).toBeVisible();
-    await wizardSkip(page);
-    await expect(page.getByText(new RegExp(`Step ${step + 1} of 10`))).toBeVisible();
-  }
+  await expect(page.getByText('Step 4 of 10')).toBeVisible();
+  await page.getByLabel('Host', { exact: true }).fill('imap.school.test');
+  await page.getByLabel('Username', { exact: true }).fill('student@school.test');
+  await page.getByLabel(/password \/ app password/i).fill('imap-password');
+  await wizardPrimary(page);
+
+  await expect(page.getByText('Step 5 of 10')).toBeVisible();
+  await page.getByLabel('Host', { exact: true }).fill('smtp.personal.test');
+  await page.getByLabel('Username', { exact: true }).fill('student@personal.test');
+  await page.getByLabel(/password \/ app password/i).fill('smtp-password');
+  await page.getByLabel(/from identity/i).fill('Redi <student@personal.test>');
+  await page.getByLabel(/your personal email/i).fill('student@personal.test');
+  await wizardPrimary(page);
+
+  await expect(page.getByText('Step 6 of 10')).toBeVisible();
+  await page.getByLabel(/account sid/i).fill('AC123456');
+  await page.getByLabel(/auth token/i).fill('twilio-token');
+  await page.getByLabel(/from-number/i).fill('+15551110000');
+  await page.getByLabel(/mobile number/i).fill('+15552220000');
+  await wizardPrimary(page);
+  await expect(page.getByText('Step 7 of 10')).toBeVisible();
+
+  const savedSettings = await (await page.request.get('/api/settings')).json();
+  const savedStatus = await (await page.request.get('/api/redi/status')).json();
+  expect(savedSettings.ai.base_url).toBe(STUB_AI_BASE_URL);
+  expect(savedStatus.aiConfigured).toBe(true);
+  expect(savedSettings.imap.enabled).toBe(true);
+  expect(savedSettings.smtp.enabled).toBe(true);
+  expect(savedSettings.twilio.enabled).toBe(true);
+  const csrf = (await page.context().cookies())
+    .find((cookie) => cookie.name === 'redi_csrf')?.value ?? '';
+  const disabled = await page.request.patch('/api/settings', {
+    data: {
+      imap: { enabled: false },
+      smtp: { enabled: false },
+      twilio: { enabled: false },
+    },
+    headers: { 'x-csrf-token': csrf },
+  });
+  expect(disabled.ok()).toBe(true);
 
   await page.getByLabel(/audit text/i).fill(
     'DEGREE AUDIT FIXTURE\nBachelor of Science in Computer Science, State University, catalog 2024.',

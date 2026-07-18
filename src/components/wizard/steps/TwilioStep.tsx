@@ -15,7 +15,7 @@ export function TwilioStep({ settings, onComplete = async () => {}, busy = false
   const [authToken, setAuthToken] = useState('');
   const [fromNumber, setFromNumber] = useState(twilio.from_number ?? '');
   const [toNumber, setToNumber] = useState(twilio.to_number ?? '');
-  const [enabled, setEnabled] = useState(twilio.enabled ?? true);
+  const [enabled, setEnabled] = useState(variant === 'wizard' ? true : (twilio.enabled ?? false));
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
@@ -44,25 +44,11 @@ export function TwilioStep({ settings, onComplete = async () => {}, busy = false
         endpoint="/api/settings/test/twilio"
         label="Send test SMS"
         showRedi
-        beforeRun={async () => {
-          if (authToken) {
-            await apiFetch('/api/settings/secret', {
-              method: 'PUT',
-              body: { name: 'twilio.auth_token', value: authToken },
-            });
-          }
-          await apiFetch('/api/settings', {
-            method: 'PATCH',
-            body: {
-              twilio: {
-                ...twilio,
-                account_sid: accountSid,
-                from_number: fromNumber,
-                to_number: toNumber,
-                enabled,
-              },
-            },
-          });
+        body={{
+          account_sid: accountSid,
+          from_number: fromNumber,
+          to_number: toNumber,
+          ...(authToken ? { auth_token: authToken } : {}),
         }}
       />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}

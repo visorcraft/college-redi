@@ -24,6 +24,13 @@ export interface AiClientHandle {
   effort: 'low' | 'medium' | 'high';
 }
 
+export interface AiClientOverrides {
+  apiKey?: string;
+  baseURL?: string;
+  model?: string;
+  effort?: 'low' | 'medium' | 'high';
+}
+
 interface Usage {
   prompt_tokens?: number;
   completion_tokens?: number;
@@ -200,19 +207,19 @@ function instrument(client: OpenAI): OpenAI {
   return client;
 }
 
-export async function getAiClient(): Promise<AiClientHandle> {
-  const apiKey = await getSecret('ai.api_key');
+export async function getAiClient(overrides: AiClientOverrides = {}): Promise<AiClientHandle> {
+  const apiKey = overrides.apiKey ?? await getSecret('ai.api_key');
   if (apiKey === null) throw new AiNotConfiguredError();
   const settings = await getSettings();
   return {
     client: instrument(new OpenAI({
       apiKey,
-      baseURL: settings.ai.base_url,
+      baseURL: overrides.baseURL ?? settings.ai.base_url,
       defaultHeaders: settings.ai.extra_headers,
       maxRetries: 1,
       timeout: 60_000,
     })),
-    model: settings.ai.model,
-    effort: settings.ai.effort,
+    model: overrides.model ?? settings.ai.model,
+    effort: overrides.effort ?? settings.ai.effort,
   };
 }

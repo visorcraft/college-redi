@@ -43,17 +43,11 @@ export function AiStep({ settings, onComplete = async () => {}, busy = false, su
       <TestConnectionButton
         endpoint="/api/settings/test/ai"
         showRedi
-        beforeRun={async () => {
-          if (apiKey) {
-            await apiFetch('/api/settings/secret', {
-              method: 'PUT',
-              body: { name: 'ai.api_key', value: apiKey },
-            });
-          }
-          await apiFetch('/api/settings', {
-            method: 'PATCH',
-            body: { ai: { ...ai, base_url: baseUrl, model, effort } },
-          });
+        body={{
+          base_url: baseUrl,
+          model,
+          effort,
+          ...(apiKey ? { api_key: apiKey } : {}),
         }}
       />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}

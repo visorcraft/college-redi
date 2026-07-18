@@ -83,6 +83,22 @@ it('marks quota-spending and message-sending tests as writes', () => {
 });
 
 describe('test_ai_connection', () => {
+  it('tests candidate settings without requiring them to be saved', async () => {
+    mocks.aiCreate.mockResolvedValue({ choices: [{ message: { tool_calls: [{ id: 'c1' }] } }] });
+    await tool('test_ai_connection').handler(ctx, {
+      base_url: 'http://candidate.test/v1',
+      api_key: 'candidate-key',
+      model: 'candidate-model',
+      effort: 'high',
+    });
+    expect(mocks.getAiClient).toHaveBeenCalledWith({
+      apiKey: 'candidate-key',
+      baseURL: 'http://candidate.test/v1',
+      model: 'candidate-model',
+      effort: 'high',
+    });
+  });
+
   it('reports not_configured when the AI client is not set up', async () => {
     const { AiNotConfiguredError } = await import('@/server/ai/client');
     mocks.getAiClient.mockRejectedValue(new AiNotConfiguredError());
@@ -122,6 +138,26 @@ describe('test_ai_connection', () => {
 });
 
 describe('test_imap_connection', () => {
+  it('uses candidate settings and password without saving them', async () => {
+    mocks.mailboxOpen.mockResolvedValue({ path: 'Candidate' });
+    await tool('test_imap_connection').handler(ctx, {
+      host: 'candidate.imap.test',
+      port: 1993,
+      tls: false,
+      username: 'candidate-user',
+      password: 'candidate-password',
+      mailbox: 'Candidate',
+    });
+    expect(vi.mocked(ImapFlow)).toHaveBeenCalledWith(expect.objectContaining({
+      host: 'candidate.imap.test',
+      port: 1993,
+      secure: false,
+      auth: { user: 'candidate-user', pass: 'candidate-password' },
+    }));
+    expect(mocks.mailboxOpen).toHaveBeenCalledWith('Candidate', { readOnly: true });
+    expect(mocks.getSecret).not.toHaveBeenCalled();
+  });
+
   it('requires imap settings', async () => {
     mocks.getSettings.mockResolvedValue({ imap: {} });
     const res: any = await tool('test_imap_connection').handler(ctx, {});
@@ -156,6 +192,30 @@ describe('test_imap_connection', () => {
 });
 
 describe('test_smtp_connection', () => {
+  it('uses candidate settings and password without saving them', async () => {
+    await tool('test_smtp_connection').handler(ctx, {
+      host: 'candidate.smtp.test',
+      port: 1587,
+      security: 'starttls',
+      username: 'candidate-user',
+      password: 'candidate-password',
+      from_address: 'Candidate <candidate@test>',
+      personal_email: 'recipient@test.com',
+    });
+    expect(vi.mocked(nodemailer.createTransport)).toHaveBeenCalledWith(expect.objectContaining({
+      host: 'candidate.smtp.test',
+      port: 1587,
+      secure: false,
+      requireTLS: true,
+      auth: { user: 'candidate-user', pass: 'candidate-password' },
+    }));
+    expect(mocks.sendMail).toHaveBeenCalledWith(expect.objectContaining({
+      from: 'Candidate <candidate@test>',
+      to: 'recipient@test.com',
+    }));
+    expect(mocks.getSecret).not.toHaveBeenCalled();
+  });
+
   it('verifies and sends a real hello-from-Redi mail to personal_email', async () => {
     const res: any = await tool('test_smtp_connection').handler(ctx, {});
     expect(res).toMatchObject({ ok: true, message_id: 'msg-1', sent_to: 'me@gmail.com' });
@@ -181,6 +241,21 @@ describe('test_smtp_connection', () => {
 });
 
 describe('test_twilio_connection', () => {
+  it('uses candidate settings and token without saving them', async () => {
+    await tool('test_twilio_connection').handler(ctx, {
+      account_sid: 'AC-candidate',
+      auth_token: 'candidate-token',
+      from_number: '+15551110000',
+      to_number: '+15552220000',
+    });
+    expect(mocks.messagesCreate).toHaveBeenCalledWith({
+      from: '+15551110000',
+      to: '+15552220000',
+      body: expect.stringContaining('test message'),
+    });
+    expect(mocks.getSecret).not.toHaveBeenCalled();
+  });
+
   it('validates credentials and sends a test SMS', async () => {
     const res: any = await tool('test_twilio_connection').handler(ctx, {});
     expect(res).toEqual({ ok: true, message_sid: 'SM1' });

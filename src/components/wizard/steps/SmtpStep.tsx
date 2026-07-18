@@ -20,7 +20,7 @@ export function SmtpStep({ settings, onComplete = async () => {}, busy = false, 
   const [password, setPassword] = useState('');
   const [fromAddress, setFromAddress] = useState(smtp.from_address ?? '');
   const [personalEmail, setPersonalEmail] = useState(smtp.personal_email ?? '');
-  const [enabled, setEnabled] = useState(smtp.enabled ?? true);
+  const [enabled, setEnabled] = useState(variant === 'wizard' ? true : (smtp.enabled ?? false));
   const [error, setError] = useState<string | null>(null);
 
   function pickProvider(id: string) {
@@ -81,28 +81,14 @@ export function SmtpStep({ settings, onComplete = async () => {}, busy = false, 
         endpoint="/api/settings/test/smtp"
         label="Send test email"
         showRedi
-        beforeRun={async () => {
-          if (password) {
-            await apiFetch('/api/settings/secret', {
-              method: 'PUT',
-              body: { name: 'smtp.password', value: password },
-            });
-          }
-          await apiFetch('/api/settings', {
-            method: 'PATCH',
-            body: {
-              smtp: {
-                ...smtp,
-                host,
-                port: Number(port),
-                security,
-                username,
-                from_address: fromAddress,
-                personal_email: personalEmail,
-                enabled,
-              },
-            },
-          });
+        body={{
+          host,
+          port: Number(port),
+          security,
+          username,
+          from_address: fromAddress,
+          personal_email: personalEmail,
+          ...(password ? { password } : {}),
         }}
       />
       <p className="text-xs text-[#1F2D50]/60">The test sends a real &quot;hello from Redi ☁️&quot; message to your personal address.</p>

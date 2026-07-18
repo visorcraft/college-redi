@@ -11,20 +11,59 @@ import { getAiClient, AiNotConfiguredError } from '../ai/client';
 type Ctx = { actor: string };
 const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-const EMPTY_JSON_SCHEMA = { type: 'object', properties: {}, additionalProperties: false } as const;
 const CONNECTION_TEST_TIMEOUT_MS = 10_000;
+
+export const TestAiConnectionParamsSchema = z.object({
+  base_url: z.string().url().optional(),
+  api_key: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  effort: z.enum(['low', 'medium', 'high']).optional(),
+}).strict();
+export const TestImapConnectionParamsSchema = z.object({
+  host: z.string().min(1).optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  tls: z.boolean().optional(),
+  username: z.string().min(1).optional(),
+  password: z.string().min(1).optional(),
+  mailbox: z.string().min(1).optional(),
+}).strict();
+export const TestSmtpConnectionParamsSchema = z.object({
+  host: z.string().min(1).optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  security: z.enum(['tls', 'starttls', 'none']).optional(),
+  username: z.string().min(1).optional(),
+  password: z.string().min(1).optional(),
+  from_address: z.string().min(1).optional(),
+  personal_email: z.string().email().optional(),
+}).strict();
+export const TestTwilioConnectionParamsSchema = z.object({
+  account_sid: z.string().min(1).optional(),
+  auth_token: z.string().min(1).optional(),
+  from_number: z.string().min(1).optional(),
+  to_number: z.string().min(1).optional(),
+}).strict();
+
+type AiTestParams = z.infer<typeof TestAiConnectionParamsSchema>;
+type ImapTestParams = z.infer<typeof TestImapConnectionParamsSchema>;
+type SmtpTestParams = z.infer<typeof TestSmtpConnectionParamsSchema>;
+type TwilioTestParams = z.infer<typeof TestTwilioConnectionParamsSchema>;
 
 const testAiConnection = {
   name: 'test_ai_connection',
   description:
     'Ping the configured AI provider with a trivial completion and verify tool-calling support. Returns model, latency, and whether the model can call tools (Redi chat is degraded to Q&A without it).',
   sideEffect: 'write' as const,
-  paramsSchema: z.object({}).strict(),
-  jsonSchema: EMPTY_JSON_SCHEMA,
-  async handler() {
+  paramsSchema: TestAiConnectionParamsSchema,
+  jsonSchema: z.toJSONSchema(TestAiConnectionParamsSchema) as Record<string, unknown>,
+  async handler(_ctx: Ctx, params: AiTestParams) {
     let client; let model;
     try {
-      ({ client, model } = await getAiClient());
+      ({ client, model } = await getAiClient({
+        apiKey: params.api_key,
+        baseURL: params.base_url,
+        model: params.model,
+        effort: params.effort,
+      }));
     } catch (err) {
       if (err instanceof AiNotConfiguredError) {
         return { ok: false, error: 'not_configured', message: 'Add your AI base URL, API key, and model first (Settings → AI).' };
@@ -77,20 +116,23 @@ async function requireSecret(name: string, hint: string) {
   return { error: null, value };
 }
 
-async function sendSmtpMail(subject: string, text: string) {
+async function sendSmtpMail(subject: string, text: string, candidate: SmtpTestParams = {}) {
   const settings = await getSettings();
-  const smtp = settings.smtp;
+  const { password: candidatePassword, ...candidateSettings } = candidate;
+  const smtp = { ...settings.smtp, ...candidateSettings };
   if (!smtp?.host || !smtp?.username || !smtp?.personal_email) {
     return { ok: false as const, error: 'not_configured', message: 'Fill in the SMTP host, username, and your personal email first.' };
   }
-  const { error, value: password } = await requireSecret('smtp.password', 'Save your SMTP password first.');
-  if (error) return error;
+  const stored = candidatePassword
+    ? { error: null, value: candidatePassword }
+    : await requireSecret('smtp.password', 'Save your SMTP password first.');
+  if (stored.error) return stored.error;
   const transporter = nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port ?? (smtp.security === 'starttls' ? 587 : 465),
     secure: smtp.security === 'tls',
     requireTLS: smtp.security === 'starttls',
-    auth: { user: smtp.username, pass: password! },
+    auth: { user: smtp.username, pass: stored.value! },
     connectionTimeout: CONNECTION_TEST_TIMEOUT_MS,
     greetingTimeout: CONNECTION_TEST_TIMEOUT_MS,
     socketTimeout: CONNECTION_TEST_TIMEOUT_MS,
@@ -109,16 +151,19 @@ async function sendSmtpMail(subject: string, text: string) {
   }
 }
 
-async function sendTwilioSms(body: string) {
+async function sendTwilioSms(body: string, candidate: TwilioTestParams = {}) {
   const settings = await getSettings();
-  const t = settings.twilio;
+  const { auth_token: candidateToken, ...candidateSettings } = candidate;
+  const t = { ...settings.twilio, ...candidateSettings };
   if (!t?.account_sid || !t.from_number || !t.to_number) {
     return { ok: false as const, error: 'not_configured', message: 'Fill in the Twilio Account SID and both phone numbers first.' };
   }
-  const { error, value: token } = await requireSecret('twilio.auth_token', 'Save your Twilio auth token first.');
-  if (error) return error;
+  const stored = candidateToken
+    ? { error: null, value: candidateToken }
+    : await requireSecret('twilio.auth_token', 'Save your Twilio auth token first.');
+  if (stored.error) return stored.error;
   try {
-    const client = twilio(t.account_sid, token!);
+    const client = twilio(t.account_sid, stored.value!);
     await client.api.accounts(t.account_sid).fetch();
     const msg = await client.messages.create({ from: t.from_number, to: t.to_number, body });
     return { ok: true as const, message_sid: msg.sid };
@@ -131,21 +176,24 @@ const testImapConnection = {
   name: 'test_imap_connection',
   description: 'Log in to the college IMAP mailbox (read-only) and select it; returns the mailbox name and unseen message count.',
   sideEffect: 'read' as const,
-  paramsSchema: z.object({}).strict(),
-  jsonSchema: EMPTY_JSON_SCHEMA,
-  async handler() {
+  paramsSchema: TestImapConnectionParamsSchema,
+  jsonSchema: z.toJSONSchema(TestImapConnectionParamsSchema) as Record<string, unknown>,
+  async handler(_ctx: Ctx, params: ImapTestParams) {
     const settings = await getSettings();
-    const imap = settings.imap;
+    const { password: candidatePassword, ...candidateSettings } = params;
+    const imap = { ...settings.imap, ...candidateSettings };
     if (!imap?.host || !imap?.username) {
       return { ok: false, error: 'not_configured', message: 'Fill in the IMAP host and username first.' };
     }
-    const { error, value: password } = await requireSecret('imap.password', 'Save your IMAP password first.');
-    if (error) return error;
+    const stored = candidatePassword
+      ? { error: null, value: candidatePassword }
+      : await requireSecret('imap.password', 'Save your IMAP password first.');
+    if (stored.error) return stored.error;
     const client = new ImapFlow({
       host: imap.host,
       port: imap.port ?? 993,
       secure: imap.tls !== false,
-      auth: { user: imap.username, pass: password! },
+      auth: { user: imap.username, pass: stored.value! },
       logger: false,
       connectionTimeout: CONNECTION_TEST_TIMEOUT_MS,
       greetingTimeout: CONNECTION_TEST_TIMEOUT_MS,
@@ -171,10 +219,10 @@ const testSmtpConnection = {
   name: 'test_smtp_connection',
   description: 'Verify the personal SMTP account and send a real "hello from Redi" test email to the configured personal address.',
   sideEffect: 'write' as const,
-  paramsSchema: z.object({}).strict(),
-  jsonSchema: EMPTY_JSON_SCHEMA,
-  async handler() {
-    return sendSmtpMail(HELLO_SUBJECT, HELLO_BODY);
+  paramsSchema: TestSmtpConnectionParamsSchema,
+  jsonSchema: z.toJSONSchema(TestSmtpConnectionParamsSchema) as Record<string, unknown>,
+  async handler(_ctx: Ctx, params: SmtpTestParams) {
+    return sendSmtpMail(HELLO_SUBJECT, HELLO_BODY, params);
   },
 };
 
@@ -182,10 +230,10 @@ const testTwilioConnection = {
   name: 'test_twilio_connection',
   description: 'Validate Twilio credentials and send a test SMS to the student\'s mobile number.',
   sideEffect: 'write' as const,
-  paramsSchema: z.object({}).strict(),
-  jsonSchema: EMPTY_JSON_SCHEMA,
-  async handler() {
-    return sendTwilioSms('☁️ Redi: test message — your SMS notifications are working.');
+  paramsSchema: TestTwilioConnectionParamsSchema,
+  jsonSchema: z.toJSONSchema(TestTwilioConnectionParamsSchema) as Record<string, unknown>,
+  async handler(_ctx: Ctx, params: TwilioTestParams) {
+    return sendTwilioSms('☁️ Redi: test message — your SMS notifications are working.', params);
   },
 };
 

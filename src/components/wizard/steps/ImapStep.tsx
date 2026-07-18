@@ -20,7 +20,7 @@ export function ImapStep({ settings, onComplete = async () => {}, busy = false, 
   const [password, setPassword] = useState('');
   const [mailbox, setMailbox] = useState(imap.mailbox ?? 'INBOX');
   const [poll, setPoll] = useState(String(imap.poll_interval_minutes ?? 5));
-  const [enabled, setEnabled] = useState(imap.enabled ?? true);
+  const [enabled, setEnabled] = useState(variant === 'wizard' ? true : (imap.enabled ?? false));
   const [error, setError] = useState<string | null>(null);
   const provider = providerById(providerId);
 
@@ -84,28 +84,13 @@ export function ImapStep({ settings, onComplete = async () => {}, busy = false, 
       <TestConnectionButton
         endpoint="/api/settings/test/imap"
         showRedi
-        beforeRun={async () => {
-          if (password) {
-            await apiFetch('/api/settings/secret', {
-              method: 'PUT',
-              body: { name: 'imap.password', value: password },
-            });
-          }
-          await apiFetch('/api/settings', {
-            method: 'PATCH',
-            body: {
-              imap: {
-                ...imap,
-                host,
-                port: Number(port),
-                tls,
-                username,
-                mailbox,
-                enabled,
-                poll_interval_minutes: Number(poll),
-              },
-            },
-          });
+        body={{
+          host,
+          port: Number(port),
+          tls,
+          username,
+          mailbox,
+          ...(password ? { password } : {}),
         }}
       />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}

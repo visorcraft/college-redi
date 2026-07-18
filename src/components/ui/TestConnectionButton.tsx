@@ -6,8 +6,8 @@ import { RediCloud } from '@/components/redi/RediCloud';
 
 interface TestResult { ok: boolean; message?: string; warning?: string; [k: string]: unknown }
 
-export function TestConnectionButton({ endpoint, label = 'Test connection', showRedi = false, beforeRun }: {
-  endpoint: string; label?: string; showRedi?: boolean; beforeRun?: () => Promise<void>;
+export function TestConnectionButton({ endpoint, label = 'Test connection', showRedi = false, body }: {
+  endpoint: string; label?: string; showRedi?: boolean; body?: unknown;
 }) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
@@ -16,8 +16,7 @@ export function TestConnectionButton({ endpoint, label = 'Test connection', show
     setRunning(true);
     setResult(null);
     try {
-      await beforeRun?.();
-      setResult(await apiFetch(endpoint, { method: 'POST' }));
+      setResult(await apiFetch(endpoint, { method: 'POST', body: body ?? {} }));
     } catch (err) {
       setResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
     } finally {
