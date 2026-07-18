@@ -103,7 +103,6 @@ describe('settings & system tools', () => {
       title: 'Deadline',
       body: 'Submit the form.',
       scheduled_for: '2026-07-17T12:00:00.000Z',
-      channels: ['email'],
     }, ctx) as { id: string };
     await sqlExec(
       `UPDATE notifications SET status = 'failed' WHERE id = '${notification.id}'`,
