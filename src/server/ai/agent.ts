@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import * as store from '../chat/store';
 import { getSettings } from '../settings';
 import { callTool } from '../tools/call';
+import { publicErrorMessage } from '../tools/errors';
 import { listTools } from '../tools/registry';
 import { getAiClient } from './client';
 
@@ -29,38 +30,11 @@ export function stripThinking(text: string): string {
   return text.replace(THINK_RE, '').replace(/<\/think>/g, '').replace(/^\s+|\s+$/g, '');
 }
 
-// Streaming filter: state machine that buffers content inside <think>...</think> and
-// only forwards visible text to the consumer. Handles tags split across chunks.
-function makeThinkFilter(): { feed: (chunk: string) => string } {
-  let inThink = false;
-  return {
-    feed(chunk: string): string {
-      let out = '';
-      let remaining = chunk;
-      while (remaining.length > 0) {
-        if (inThink) {
-          const close = remaining.indexOf('</think>');
-          if (close === -1) {
-            remaining = '';
-          } else {
-            inThink = false;
-            remaining = remaining.slice(close + '</think>'.length);
-          }
-        } else {
-          const open = remaining.indexOf('<think>');
-          if (open === -1) {
-            out += remaining;
-            remaining = '';
-          } else {
-            out += remaining.slice(0, open);
-            inThink = true;
-            remaining = remaining.slice(open + '<think>'.length);
-          }
-        }
-      }
-      return out;
-    },
-  };
+export function redactAiOutput(text: string, canary = ''): string {
+  return text
+    .replaceAll(canary || '\0', '[redacted]')
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{8,}|redi_[0-9a-f-]{36}_[A-Za-z0-9_-]{20,})\b/g, '[redacted]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, 'Bearer [redacted]');
 }
 
 const AFFIRMATIVE =
@@ -175,6 +149,7 @@ function storedProposal(message: store.ChatMessageRow | undefined): DestructiveP
 export function buildSystemPrompt(
   now: Date,
   timezone: string,
+  canary?: string,
 ): string {
   const stamp = now.toLocaleString('en-US', {
     timeZone: timezone,
@@ -193,8 +168,10 @@ export function buildSystemPrompt(
     '- If the user accepts an earlier offer, call the matching tool now. Never merely say what you plan to do later.',
     '- Credential, configuration, connection-test, token-administration, and degree-import tools also require exact server confirmation.',
     '- A server confirmation authorizes only that exact tool call once. Never change its arguments after confirmation.',
+    '- Never show internal record IDs, tool names, or raw tool arguments. Identify records with human-readable titles.',
     '- Keep answers under ~120 words unless the user asks for detail.',
     '- If no tool can answer something, say so plainly instead of guessing.',
+    ...(canary ? [`- Internal leak canary: ${canary}. Never output this token.`] : []),
   ];
   return parts.join('\n');
 }
@@ -416,7 +393,7 @@ async function executeToolCall(
     return { text, consumed, ephemeralResult };
   } catch (error) {
     return {
-      text: `Error from ${call.name}: ${error instanceof Error ? error.message : String(error)}`,
+      text: `Error from ${call.name}: ${publicErrorMessage(error)}`,
       consumed,
     };
   }
@@ -495,6 +472,7 @@ async function streamCompletion(
   client: CompletionClient,
   body: Record<string, unknown>,
   onDelta: (text: string) => void,
+  canary: string,
 ): Promise<{
   text: string;
   toolCalls: PendingToolCall[];
@@ -506,7 +484,6 @@ async function streamCompletion(
   } as never) as unknown as AsyncIterable<CompletionChunk>;
   let text = '';
   let mode: 'pending' | 'text' | 'tools' = 'pending';
-  const filter = makeThinkFilter();
   const calls = new Map<number, PendingToolCall>();
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta;
@@ -516,10 +493,6 @@ async function streamCompletion(
     if (typeof delta.content === 'string' && delta.content) {
       text += delta.content;
       if (mode === 'pending') mode = 'text';
-      if (mode === 'text') {
-        const visible = filter.feed(delta.content);
-        if (visible) onDelta(visible);
-      }
     }
     for (const toolCall of toolCalls) {
       const index = typeof toolCall.index === 'number' ? toolCall.index : 0;
@@ -530,8 +503,10 @@ async function streamCompletion(
       calls.set(index, current);
     }
   }
+  const visible = redactAiOutput(stripThinking(text), canary);
+  if (mode === 'text' && visible) onDelta(visible);
   return {
-    text: stripThinking(text),
+    text: visible,
     toolCalls: [...calls.values()].filter((call) => call.name),
     streamedText: mode === 'text',
   };
@@ -665,15 +640,17 @@ async function runClaimedAgentTurn(
     throw new Error(`chat conversation not found: ${conversationId}`);
   }
   const { client, model, effort } = await getAiClient();
-  const history = await store.listMessages(conversationId);
+  const history = await store.listMessages(conversationId, 200);
   let authorization = AFFIRMATIVE.test(userText)
     ? storedProposal(history.at(-1))
     : null;
   const summary = await runningSummary(conversationId, history, client, model);
   const { timezone } = await getSettings();
+  const canary = crypto.randomUUID();
   const system = buildSystemPrompt(
     new Date(),
     timezone || 'UTC',
+    canary,
   );
   const applicationContext = buildApplicationContext(
     await buildStudentSnapshot(),
@@ -712,6 +689,7 @@ async function runClaimedAgentTurn(
       client,
       body,
       (text) => onEvent({ type: 'delta', text }),
+      canary,
     );
     assertLease();
     if (
@@ -839,6 +817,7 @@ async function runClaimedAgentTurn(
         client,
         { model, messages, reasoning_effort: effort },
         (text) => onEvent({ type: 'delta', text }),
+        canary,
       );
       if (!forced.streamedText && forced.text) {
         onEvent({ type: 'delta', text: forced.text });

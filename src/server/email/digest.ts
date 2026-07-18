@@ -1,4 +1,5 @@
 import { exec, rows } from './store';
+import { lit } from '../db/sql';
 
 export interface CollegeEmailDigestItem {
   id: string;
@@ -7,8 +8,6 @@ export interface CollegeEmailDigestItem {
   summary: string | null;
   received_at: string;
 }
-
-const sqlString = (value: string): string => `'${value.replace(/'/g, "''")}'`;
 
 /** Return unsurfaced informational email, oldest first, capped at 50. */
 export async function collectCollegeEmailDigestItems(): Promise<CollegeEmailDigestItem[]> {
@@ -25,7 +24,7 @@ export async function markCollegeEmailDigestItemsIncluded(
   if (ids.length === 0) return;
   await exec(
     `UPDATE emails_processed SET notified = TRUE WHERE id IN (` +
-    `${ids.map(sqlString).join(', ')})`,
+    `${ids.map(lit).join(', ')})`,
   );
 }
 

@@ -14,7 +14,7 @@ import {
 
 const PUBLIC_API_PATHS = new Set(['/api/health', '/api/auth/me', '/api/auth/login', '/api/auth/setup', '/api/cron/tick']);
 
-export default async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const forwardedHeaders = new Headers(req.headers);
@@ -107,7 +107,6 @@ export default async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  runtime: 'nodejs',
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|redi-cloud.svg|redi-cloud.lottie.json).*)',
   ],

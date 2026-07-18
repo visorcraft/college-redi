@@ -40,6 +40,7 @@ export default defineConfig({
       env: {
         PORT: '3100',
         DATA_DIR: './tests/e2e/.runtime-data',
+        ALLOW_PRIVATE_NETWORK_TARGETS: 'true',
         DATABASE_MODE: 'embedded',
         SCHEDULER_ENABLED: 'false',
         CRON_SECRET: 'e2e-cron-secret',

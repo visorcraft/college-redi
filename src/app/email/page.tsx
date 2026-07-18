@@ -45,18 +45,34 @@ export default function EmailPage() {
   const [action, setAction] = useState<'junk' | 'important'>('junk');
   const [checking, setChecking] = useState(false);
   const [notice, setNotice] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
     const query = filter === 'all' ? '' : `?classification=${filter}`;
-    const [processed, review, senderRules] = await Promise.all([
-      fetch(`/api/email/processed${query}`).then((res) => res.json()),
-      fetch('/api/events?status=pending_review').then((res) => res.json()),
-      fetch('/api/email/sender-rules').then((res) => res.json()),
-    ]);
-    setEmails(processed.emails ?? []);
-    setTotal(processed.total ?? 0);
-    setEvents(review.events ?? []);
-    setRules(senderRules.rules ?? []);
+    try {
+      const read = async (url: string) => {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+        return response.json();
+      };
+      const [processed, review, senderRules] = await Promise.all([
+        read(`/api/email/processed${query}`),
+        read('/api/events?status=pending_review'),
+        read('/api/email/sender-rules'),
+      ]);
+      setEmails(processed.emails ?? []);
+      setTotal(processed.total ?? 0);
+      setEvents(review.events ?? []);
+      setRules(senderRules.rules ?? []);
+    } catch (error) {
+      setLoadError(true);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   }, [filter]);
 
   useEffect(() => {
@@ -124,12 +140,18 @@ export default function EmailPage() {
         </button>
       </div>
       {notice && <p className="mb-4 rounded-xl bg-[#EAF3FB] p-3 text-sm">{notice}</p>}
+      {loading && <p className="mb-4 text-sm" role="status">Loading college email…</p>}
+      {loadError && (
+        <p className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">
+          Could not load college email. Try again.
+        </p>
+      )}
 
       <section aria-labelledby="review" className="mb-8">
         <h2 id="review" className="mb-2 text-lg font-semibold">
           Review deadlines ({events.length})
         </h2>
-        {events.length === 0 && (
+        {!loading && !loadError && events.length === 0 && (
           <p className="text-sm opacity-70">
             Nothing waiting for review. Redi will put possible deadlines here.
           </p>
@@ -185,7 +207,7 @@ export default function EmailPage() {
             ))}
           </div>
         </div>
-        {emails.length === 0 && <p className="text-sm opacity-70">No emails processed yet.</p>}
+        {!loading && !loadError && emails.length === 0 && <p className="text-sm opacity-70">No emails processed yet.</p>}
         <ul className="space-y-2">
           {emails.map((email) => (
             <li key={email.id} className="rounded-2xl bg-white p-4 shadow-sm">

@@ -21,9 +21,14 @@ vi.mock('@/server/ai/client', () => {
   return { getAiClient: mocks.getAiClient, AiNotConfiguredError };
 });
 vi.mock('imapflow', () => ({
-  ImapFlow: vi.fn().mockImplementation(() => ({
-    connect: mocks.imapConnect, mailboxOpen: mocks.mailboxOpen, status: mocks.imapStatus, logout: mocks.imapLogout,
-  })),
+  ImapFlow: vi.fn(function MockImapFlow() {
+    return {
+      connect: mocks.imapConnect,
+      mailboxOpen: mocks.mailboxOpen,
+      status: mocks.imapStatus,
+      logout: mocks.imapLogout,
+    };
+  }),
 }));
 vi.mock('nodemailer', () => ({
   default: { createTransport: vi.fn(() => ({ verify: mocks.smtpVerify, sendMail: mocks.sendMail })) },

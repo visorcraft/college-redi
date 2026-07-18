@@ -7,10 +7,21 @@ import type { Banner } from '@/lib/banners';
 
 export function BannerList({ banners, dismissed }: { banners: Banner[]; dismissed: string[] }) {
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
+  const [error, setError] = useState('');
 
   async function dismiss(id: string) {
     setGone((prev) => new Set(prev).add(id));
-    await apiFetch('/api/settings', { method: 'PATCH', body: { ui: { setup_dismissed: [...dismissed, id] } } }).catch(() => {});
+    setError('');
+    try {
+      await apiFetch('/api/settings', { method: 'PATCH', body: { ui: { setup_dismissed: [...dismissed, id] } } });
+    } catch {
+      setGone((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setError('Could not dismiss reminder. Try again.');
+    }
   }
 
   const visible = banners.filter((b) => !gone.has(b.id));
@@ -18,6 +29,7 @@ export function BannerList({ banners, dismissed }: { banners: Banner[]; dismisse
 
   return (
     <div className="flex flex-col gap-2" role="region" aria-label="Setup reminders">
+      {error && <p className="text-sm text-red-700" role="alert">{error}</p>}
       {visible.map((b) => (
         <div key={b.id} className="flex items-center justify-between gap-3 rounded-xl bg-[#FFF4DD] px-4 py-2 text-sm text-[#1F2D50]">
           <span>{b.text}</span>

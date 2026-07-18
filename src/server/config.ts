@@ -1,5 +1,5 @@
+import { existsSync } from 'node:fs';
 import path from 'node:path';
-import dotenv from 'dotenv';
 import { z } from 'zod';
 
 const ConfigSchema = z.object({
@@ -31,8 +31,8 @@ export function getConfig(): AppConfig {
   if (cached) return cached;
   const dataDir = process.env.DATA_DIR?.trim() || './data';
   // Load bootstrap credentials written by scripts/bootstrap-env.sh (spec §4.6).
-  // dotenv never overrides variables already present in process.env; a missing file is fine.
-  dotenv.config({ path: path.join(dataDir, '.env') });
+  const envFile = path.join(dataDir, '.env');
+  if (existsSync(envFile)) process.loadEnvFile(envFile);
   const parsed = ConfigSchema.parse(process.env);
   cached = { ...parsed, MONGRELDB_PATH: parsed.MONGRELDB_PATH ?? path.join(parsed.DATA_DIR, 'db') };
   return cached;

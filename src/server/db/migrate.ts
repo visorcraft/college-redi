@@ -4,6 +4,7 @@ import { getConfig, requireDbCredentials } from '../config';
 import { getDb, type AppDb } from './client';
 import { schema } from '../../../db/schema';
 import { migrations } from '../../../db/migrations';
+import { lit } from './sql';
 
 const MIGRATIONS_TABLE = '__redi_schema_migrations';
 
@@ -115,7 +116,7 @@ export async function runMigrations(db?: AppDb): Promise<void> {
     }
     await sql(
       `INSERT INTO "${MIGRATIONS_TABLE}" ("version", "name", "applied_at") VALUES (` +
-        `${migration.version}, ${sqlString(migration.name)}, ${sqlString(new Date().toISOString())})`,
+        `${migration.version}, ${lit(migration.name)}, ${lit(new Date().toISOString())})`,
     );
   }
 
@@ -312,8 +313,4 @@ function remoteType(storageType: string): string {
   const type = types[storageType];
   if (!type) throw new Error(`no remote type mapping for storage type '${storageType}'`);
   return type;
-}
-
-function sqlString(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
 }

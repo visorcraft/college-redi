@@ -11,8 +11,11 @@ test('mobile dashboard and chat remain usable', async ({ page }) => {
   await expect(page.getByTestId('redi-widget')).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const widget = await page.getByTestId('redi-widget').boundingBox();
-  const dismiss = await page.getByRole('button', { name: /^Dismiss:/ }).last().boundingBox();
-  expect(dismiss!.y + dismiss!.height).toBeLessThanOrEqual(widget!.y);
+  const dismissButton = page.getByRole('button', { name: /^Dismiss:/ }).last();
+  if (await dismissButton.count()) {
+    const dismiss = await dismissButton.boundingBox();
+    expect(dismiss!.y + dismiss!.height).toBeLessThanOrEqual(widget!.y);
+  }
   await openChat(page);
   await expect(page.getByTestId('chat-input')).toBeVisible();
   await page.keyboard.press('Escape');

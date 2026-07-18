@@ -39,6 +39,7 @@ Read the story behind the project in [about.md](about.md).
 ```bash
 git clone https://github.com/visorcraft/college-redi.git
 cd college-redi
+install -d -m 700 redi-data
 docker compose up -d --build
 docker compose exec redi sed -n 's/^REDI_SETUP_TOKEN=//p' /data/.env
 ```
@@ -48,6 +49,7 @@ docker compose exec redi sed -n 's/^REDI_SETUP_TOKEN=//p' /data/.env
 ```bash
 git clone https://github.com/visorcraft/college-redi.git
 cd college-redi
+install -d -m 700 redi-data
 podman compose up -d --build
 podman compose exec redi sed -n 's/^REDI_SETUP_TOKEN=//p' /data/.env
 ```

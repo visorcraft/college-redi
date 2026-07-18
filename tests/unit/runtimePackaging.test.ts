@@ -2,6 +2,12 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('production runtime packaging', () => {
+  it('does not trace live runtime data into standalone builds', () => {
+    const config = readFileSync('next.config.ts', 'utf8');
+    expect(config).toContain("'./data/**/*'");
+    expect(config).toContain("'./redi-data/**/*'");
+    expect(readFileSync('package.json', 'utf8')).toContain('next build --webpack');
+  });
   it('copies the PDF.js worker package into the standalone image', () => {
     expect(readFileSync('Dockerfile', 'utf8')).toContain(
       'COPY --from=deps /app/node_modules/pdfjs-dist/build/pdf.worker.mjs ./.next/server/chunks/pdf.worker.mjs',
@@ -17,9 +23,9 @@ describe('production runtime packaging', () => {
 
   it('ships Redi as SVG and Lottie assets', () => {
     expect(readFileSync('public/redi-cloud.svg', 'utf8')).toContain('#1F2D50');
-    const middleware = readFileSync('src/middleware.ts', 'utf8');
-    expect(middleware).toContain('redi-cloud.svg');
-    expect(middleware).toContain('redi-cloud.lottie.json');
+    const proxy = readFileSync('src/proxy.ts', 'utf8');
+    expect(proxy).toContain('redi-cloud.svg');
+    expect(proxy).toContain('redi-cloud.lottie.json');
     const lottie = JSON.parse(
       readFileSync('public/redi-cloud.lottie.json', 'utf8'),
     ) as {

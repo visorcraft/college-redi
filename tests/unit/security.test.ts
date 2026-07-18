@@ -12,7 +12,7 @@ import {
   rateLimitExceeded,
   requestRateLimitExceeded,
 } from '../../src/server/security';
-import middleware from '../../src/middleware';
+import { proxy } from '../../src/proxy';
 
 function req(
   url: string,
@@ -158,13 +158,13 @@ describe('rate limiter', () => {
     try {
       const ip = `203.0.113.${Math.floor(Math.random() * 200) + 1}`;
       for (let i = 0; i < 10; i += 1) {
-        const response = await middleware(req(
+        const response = await proxy(req(
           'http://localhost/api/auth/login',
           { method: 'POST', headers: { 'x-forwarded-for': ip } },
         ));
         expect(response.status).toBe(200);
       }
-      const blocked = await middleware(req(
+      const blocked = await proxy(req(
         'http://localhost/api/auth/login',
         { method: 'POST', headers: { 'x-forwarded-for': ip } },
       ));

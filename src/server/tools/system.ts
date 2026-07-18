@@ -12,6 +12,7 @@ import { isSchedulerAlive } from '../scheduler';
 import { sqlRows } from '../db/sql';
 import { getAiUsageStatus } from '../ai/client';
 import { defineTool, registerTool, type Tool } from './registry';
+import { assertPublicNetworkHost } from '../network';
 
 const searchAllParams = z.object({
   query: z.string().trim().min(1).max(200),
@@ -80,6 +81,7 @@ async function checkSmtp(
 ) {
   const smtp = settings.smtp;
   if (!smtp.host || !password) return { valid: false, error: 'not configured' };
+  await assertPublicNetworkHost(smtp.host);
   const transport = nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port,
@@ -208,9 +210,9 @@ export const getSystemStatusTool: Tool = defineTool({
     } catch (err) {
       dbStatus = { mode: cfg.DATABASE_MODE, ok: false, error: err instanceof Error ? err.message : String(err) };
     }
-    const [pendingRows, deliveryRows] = await Promise.all([
-      sqlRows<{ id: string }>(
-        "SELECT id FROM notifications WHERE status = 'pending'",
+    const [pendingRows, emailDeliveryRows, smsDeliveryRows] = await Promise.all([
+      sqlRows<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM notifications WHERE status = 'pending'",
       ),
       sqlRows<{
         channel: string;
@@ -219,14 +221,23 @@ export const getSystemStatusTool: Tool = defineTool({
       }>(
         `SELECT h.channel, h.status, n.status AS notification_status ` +
         `FROM notification_history h JOIN notifications n ON n.id = h.notification_id ` +
-        `WHERE h.channel IN ('email', 'sms') ORDER BY h.sent_at DESC`,
+        `WHERE h.channel = 'email' ORDER BY h.sent_at DESC LIMIT 1`,
+      ),
+      sqlRows<{
+        channel: string;
+        status: string;
+        notification_status: string;
+      }>(
+        `SELECT h.channel, h.status, n.status AS notification_status ` +
+        `FROM notification_history h JOIN notifications n ON n.id = h.notification_id ` +
+        `WHERE h.channel = 'sms' ORDER BY h.sent_at DESC LIMIT 1`,
       ),
     ]);
-    const pending = pendingRows.length;
-    const latestDelivery = new Map<string, (typeof deliveryRows)[number]>();
-    for (const row of deliveryRows) {
-      if (!latestDelivery.has(row.channel)) latestDelivery.set(row.channel, row);
-    }
+    const pending = Number(pendingRows[0]?.n ?? 0);
+    const latestDelivery = new Map([
+      ['email', emailDeliveryRows[0]],
+      ['sms', smsDeliveryRows[0]],
+    ]);
     const deliveryFailed = (channel: 'email' | 'sms') => {
       const latest = latestDelivery.get(channel);
       return latest?.status === 'failed' && latest.notification_status === 'failed';

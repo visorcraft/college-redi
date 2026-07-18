@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getSessionKey } from './keys';
-import { getSecret } from './secrets';
+import { getSecret, setSecret, setSecretIfAbsent } from './secrets';
 
 export const SESSION_COOKIE = 'redi_session';
 export const CSRF_COOKIE = 'redi_csrf';
@@ -8,9 +8,10 @@ export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
 const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000;
 
 interface SessionPayload {
-  v: 2;
+  v: 3;
   exp: number;
   pwd: string;
+  sid: string;
 }
 
 export async function createSessionToken(now: number = Date.now()): Promise<string> {
@@ -26,9 +27,10 @@ export async function refreshSessionToken(
 
 async function signSessionToken(passwordVersion: string, now: number): Promise<string> {
   const payload = Buffer.from(JSON.stringify({
-    v: 2,
+    v: 3,
     exp: now + SESSION_TTL_MS,
     pwd: passwordVersion,
+    sid: await sessionEpoch(),
   } satisfies SessionPayload)).toString('base64url');
   const sig = createHmac('sha256', await getSessionKey()).update(payload).digest('base64url');
   return `${payload}.${sig}`;
@@ -50,17 +52,31 @@ export async function readSessionToken(
   if (sig.length !== expected.length || !timingSafeEqual(sig, expected)) return { valid: false };
   try {
     const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as SessionPayload;
-    const valid = parsed.v === 2
+    const valid = parsed.v === 3
       && typeof parsed.exp === 'number'
       && parsed.exp > now
       && typeof parsed.pwd === 'string'
-      && parsed.pwd === await passwordVersion();
+      && parsed.pwd === await passwordVersion()
+      && typeof parsed.sid === 'string'
+      && parsed.sid === await sessionEpoch();
     return valid
       ? { valid: true, passwordVersion: parsed.pwd }
       : { valid: false };
   } catch {
     return { valid: false };
   }
+}
+
+async function sessionEpoch(): Promise<string> {
+  const existing = await getSecret('login.session_epoch');
+  if (existing) return existing;
+  const created = randomBytes(32).toString('base64url');
+  await setSecretIfAbsent('login.session_epoch', created);
+  return await getSecret('login.session_epoch') ?? created;
+}
+
+export async function revokeAllSessions(): Promise<void> {
+  await setSecret('login.session_epoch', randomBytes(32).toString('base64url'));
 }
 
 async function passwordVersion(): Promise<string> {

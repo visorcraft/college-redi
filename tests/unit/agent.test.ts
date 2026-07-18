@@ -176,29 +176,32 @@ describe('Redi agent loop', () => {
     expect(request.messages[0].role).toBe('system');
   });
 
-  it('emits plain-answer deltas before the upstream stream finishes', async () => {
+  it('holds plain answers until the full output has been redacted', async () => {
     const context = await boot([{
       content: 'First light',
       finishDelayMs: 100,
     }]);
     const conversation = await context.store.createConversation();
-    let resolveDelta!: () => void;
-    const delta = new Promise<void>((resolve) => {
-      resolveDelta = resolve;
-    });
-    let finished = false;
+    let sawDelta = false;
     const turn = context.agent.runAgentTurn(
       conversation.id,
       'hello slowly',
       (event) => {
-        if (event.type === 'delta') resolveDelta();
+        if (event.type === 'delta') sawDelta = true;
       },
-    ).finally(() => {
-      finished = true;
-    });
-    await delta;
-    expect(finished).toBe(false);
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(sawDelta).toBe(false);
     await turn;
+    expect(sawDelta).toBe(true);
+  });
+
+  it('redacts leak canaries and credential-shaped output', async () => {
+    const context = await boot([{ content: 'unused' }]);
+    expect(context.agent.redactAiOutput(
+      'token leak-canary sk-secret123 Bearer abc.def',
+      'leak-canary',
+    )).toBe('token [redacted] [redacted] Bearer [redacted]');
   });
 
   it('runs a tool round and feeds the result back', async () => {

@@ -33,6 +33,20 @@ describe('buildBanners', () => {
     ]);
   });
 
+  it('hides stale checklist and transient AI health banners', () => {
+    const banners = buildBanners(
+      {
+        wizard_state: {
+          skipped_steps: ['checklist'],
+          pending_checklist: [{ title: 'Send transcript' }],
+        },
+        ui: {},
+      },
+      { ai: { configured: true, reachable: false, error: 'Request timed out.' } },
+    );
+    expect(banners).toEqual([]);
+  });
+
   it('surfaces exhausted email and text deliveries', () => {
     const banners = buildBanners(
       { wizard_state: { skipped_steps: [] }, ui: {} },

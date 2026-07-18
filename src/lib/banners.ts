@@ -12,14 +12,13 @@ export const SKIPPED_STEP_BANNERS: Record<string, { text: string; href: string }
 };
 
 const CHANNEL_BANNERS: Record<string, { label: string; href: string }> = {
-  ai: { label: 'The AI provider', href: '/settings/ai' },
   imap: { label: 'College email login', href: '/settings/imap' },
   smtp: { label: 'Personal email sending', href: '/settings/smtp' },
   twilio: { label: 'Text messages', href: '/settings/twilio' },
 };
 
 interface BannerSettings {
-  wizard_state?: { skipped_steps?: string[] };
+  wizard_state?: { skipped_steps?: string[]; pending_checklist?: unknown[] };
   ui?: { setup_dismissed?: string[] };
   ai?: { model?: string };
   imap?: { host?: string; last_error?: string | null };
@@ -56,9 +55,7 @@ export function buildBanners(settings: BannerSettings, status: unknown): Banner[
     : {};
   for (const [name, check] of Object.entries(checks)) {
     if (check && typeof check === 'object') {
-      const failed = name === 'ai'
-        ? check.configured !== false && check.reachable === false
-        : name === 'imap'
+      const failed = name === 'imap'
           ? Boolean(check.last_error)
           : check.configured !== false
             && (check.valid === false || Boolean(check.last_delivery_error));
@@ -104,6 +101,8 @@ function isStepActuallyConfigured(step: string, settings: BannerSettings): boole
     case 'degree':
       return Boolean((settings as Record<string, unknown>).degree_profile
         && ((settings as Record<string, unknown>).degree_profile as Record<string, unknown>).program);
+    case 'checklist':
+      return Boolean(settings.wizard_state?.pending_checklist?.length);
     case 'notifications':
       return Boolean((settings as Record<string, unknown>).notification_prefs);
     default:

@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { lit, sqlExec, sqlRows } from '../db/sql';
 import { getSecret } from '../secrets';
 import { getSettings } from '../settings';
+import { assertPublicHttpUrl } from '../network';
 
 export class AiNotConfiguredError extends Error {
   constructor() {
@@ -30,6 +31,11 @@ export interface AiClientOverrides {
   model?: string;
   effort?: 'low' | 'medium' | 'high';
 }
+
+const noRedirectFetch: typeof fetch = (input, init) => fetch(input, {
+  ...init,
+  redirect: 'error',
+});
 
 export function hasAiConfiguration(
   apiKey: string | null,
@@ -218,11 +224,14 @@ export async function getAiClient(overrides: AiClientOverrides = {}): Promise<Ai
   const apiKey = overrides.apiKey ?? await getSecret('ai.api_key');
   if (apiKey === null) throw new AiNotConfiguredError();
   const settings = await getSettings();
+  const baseURL = overrides.baseURL ?? settings.ai.base_url;
+  await assertPublicHttpUrl(baseURL);
   return {
     client: instrument(new OpenAI({
       apiKey,
-      baseURL: overrides.baseURL ?? settings.ai.base_url,
+      baseURL,
       defaultHeaders: settings.ai.extra_headers,
+      fetch: noRedirectFetch,
       maxRetries: 1,
       timeout: 60_000,
     })),

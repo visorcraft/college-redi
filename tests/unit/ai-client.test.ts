@@ -70,9 +70,22 @@ describe('getAiClient', () => {
       apiKey: 'sk-unit-test',
       baseURL: 'https://api.openai.com/v1',
       defaultHeaders: undefined,
+      fetch: expect.any(Function),
       maxRetries: 1,
       timeout: 60_000,
     });
+  });
+
+  it('rejects provider redirects', async () => {
+    await setSecret('ai.api_key', 'sk-unit-test');
+    await getAiClient();
+    const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+    await (ctorArgs[0]!.fetch as typeof fetch)('https://ai.example/v1', { redirect: 'follow' });
+    expect(request).toHaveBeenCalledWith(
+      'https://ai.example/v1',
+      expect.objectContaining({ redirect: 'error' }),
+    );
+    request.mockRestore();
   });
 
   it('honors headers, counts calls, logs hashes and usage, and enforces the cap', async () => {

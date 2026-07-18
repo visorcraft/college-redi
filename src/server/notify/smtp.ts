@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { getSettings } from '../settings';
 import { getSecret } from '../secrets';
 import type { EngineSettings } from './engine';
+import { assertPublicNetworkHost } from '../network';
 
 export async function sendSmtpMail(input: {
   to: string;
@@ -10,6 +11,7 @@ export async function sendSmtpMail(input: {
 }): Promise<{ messageId: string }> {
   const smtp = ((await getSettings()) as unknown as EngineSettings).smtp;
   if (!smtp?.enabled || !smtp.host) throw new Error('smtp not configured');
+  await assertPublicNetworkHost(smtp.host);
   const password = await getSecret('smtp.password');
   const transporter = nodemailer.createTransport({
     host: smtp.host,

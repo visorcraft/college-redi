@@ -242,7 +242,12 @@ export async function runEmailPipeline(deps: PipelineDeps = {}): Promise<Pipelin
         })),
         { timezone: settings.timezone ?? 'UTC', now },
       );
-    } catch {
+    } catch (error) {
+      console.error(JSON.stringify({
+        level: 'error',
+        msg: 'email triage failed',
+        error_name: error instanceof Error ? error.name : 'UnknownError',
+      }));
       outcomes = pendingAi.map(() => ({ ok: false as const, error: 'triage call failed' }));
     }
 

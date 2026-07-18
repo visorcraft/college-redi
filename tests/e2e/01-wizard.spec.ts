@@ -12,7 +12,7 @@ test('wizard happy path configures login, AI, checklist, and defaults', async ({
   await expect(page).toHaveURL(/\/wizard$/);
   expect(response?.headers()['content-security-policy']).toContain("'nonce-");
   expect(await page.locator('script[nonce]').count()).toBeGreaterThan(0);
-  await page.getByRole('button', { name: /let's go/i }).click();
+  await wizardPrimary(page);
   await expect(page.getByRole('heading', { name: /your login/i })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: /your login/i })).toBeVisible();
@@ -21,7 +21,7 @@ test('wizard happy path configures login, AI, checklist, and defaults', async ({
   await page.getByLabel(/confirm password/i).fill(E2E_PASSWORD);
   await page.getByLabel(/setup token/i)
     .fill('e2e-setup-token-0123456789abcdef0123456789abcdef');
-  await page.getByRole('button', { name: /create password/i }).click();
+  await wizardPrimary(page);
 
   await page.getByLabel(/base url/i).fill(STUB_AI_BASE_URL);
   await page.getByLabel(/api key/i).fill('e2e-test-key');
@@ -101,6 +101,6 @@ test('wizard happy path configures login, AI, checklist, and defaults', async ({
     .toContainText('Your degree set up');
   await expect(page.getByRole('listitem').filter({ hasText: 'Notification style' }))
     .toContainText('Notification style not set up');
-  await page.getByRole('button', { name: /dashboard/i }).click();
+  await wizardPrimary(page);
   await expectDashboard(page);
 });

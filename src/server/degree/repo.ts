@@ -1,4 +1,4 @@
-import { sqlRows, withSqlTransaction } from '../db/sql';
+import { lit, sqlExec, sqlRows, withSqlTransaction } from '../db/sql';
 import { ConflictError, NotFoundError } from '../tools/errors';
 import type { BucketRule } from '../../lib/schemas/degree';
 
@@ -6,17 +6,7 @@ export function newId(): string { return crypto.randomUUID(); }
 export function nowIso(): string { return new Date().toISOString(); }
 
 type SqlValue = string | number | bigint | boolean | null | undefined;
-
-export function lit(v: SqlValue): string {
-  if (v === null || v === undefined) return 'NULL';
-  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
-  if (typeof v === 'bigint') return v.toString();
-  if (typeof v === 'number') {
-    if (!Number.isFinite(v)) throw new Error('refusing non-finite number literal');
-    return String(v);
-  }
-  return `'${v.replace(/'/g, "''")}'`;
-}
+export { lit, sqlExec };
 
 export async function sqlAll<T = Record<string, unknown>>(sql: string): Promise<T[]> {
   return sqlRows<T>(sql);
@@ -24,8 +14,6 @@ export async function sqlAll<T = Record<string, unknown>>(sql: string): Promise<
 export async function sqlOne<T = Record<string, unknown>>(sql: string): Promise<T | null> {
   return (await sqlAll<T>(sql))[0] ?? null;
 }
-export async function sqlExec(sql: string): Promise<void> { await sqlAll(sql); }
-
 export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
   return withSqlTransaction(fn);
 }

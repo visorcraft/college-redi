@@ -1,12 +1,7 @@
 'use client';
 
-export function csrfHeaders(): Record<string, string> {
-  const token = document.cookie
-    .split('; ')
-    .find((cookie) => cookie.startsWith('redi_csrf='))
-    ?.slice('redi_csrf='.length);
-  return token ? { 'x-csrf-token': decodeURIComponent(token) } : {};
-}
+import { csrfHeaders } from '@/lib/api';
+export { csrfHeaders } from '@/lib/api';
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const method = init?.method?.toUpperCase() ?? 'GET';

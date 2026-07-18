@@ -11,28 +11,43 @@ interface CardState {
 
 export default function CollegeInboxCard() {
   const [state, setState] = useState<CardState | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     void (async () => {
-      const settings = await fetch('/api/settings').then((res) => res.json());
+      const settingsResponse = await fetch('/api/settings');
+      if (!settingsResponse.ok) throw new Error('Settings request failed');
+      const settings = await settingsResponse.json();
       const imap = settings?.imap ?? settings?.payload?.imap;
       if (!imap?.enabled || !imap?.host) {
         setState({ configured: false, count: 0, latest: [] });
         return;
       }
       const since = encodeURIComponent(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
-      const data = await fetch(
+      const response = await fetch(
         `/api/email/processed?classification=actionable&since=${since}&limit=3`,
-      ).then((res) => res.json());
+      );
+      if (!response.ok) throw new Error('Email request failed');
+      const data = await response.json();
       setState({
         configured: true,
         count: data.total ?? 0,
         latest: (data.emails ?? []).slice(0, 3),
       });
-    })().catch(() => setState({ configured: false, count: 0, latest: [] }));
+    })().catch(() => setError(true));
   }, []);
 
-  if (!state) return null;
+  if (error) {
+    return (
+      <section className="rounded-2xl bg-white p-4 shadow-sm" aria-label="College inbox">
+        <h2 className="font-semibold text-[#1F2D50]">College inbox</h2>
+        <p className="mt-1 text-sm text-red-700" role="alert">Could not load college inbox status.</p>
+      </section>
+    );
+  }
+  if (!state) {
+    return <section className="rounded-2xl bg-white p-4 shadow-sm" aria-label="College inbox" aria-busy="true">Loading college inbox…</section>;
+  }
   if (!state.configured) {
     return (
       <section className="rounded-2xl bg-white p-4 shadow-sm" aria-label="College inbox">

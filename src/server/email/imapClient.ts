@@ -1,4 +1,5 @@
 import { ImapFlow } from 'imapflow';
+import { assertPublicNetworkHost } from '../network';
 import { simpleParser } from 'mailparser';
 import { getSecret } from '../secrets';
 import { getSettings } from '../settings';
@@ -259,6 +260,7 @@ export function createImapSource(): ImapSource {
     run: (connection: ImapConnection) => Promise<T>,
   ): Promise<T> {
     const config = await resolveImapConfig();
+    await assertPublicNetworkHost(config.host);
     const connection = new ImapFlowConnection(config);
     await connection.connect();
     try {

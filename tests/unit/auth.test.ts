@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeTestEnv, resetServerState, type TestEnv } from '../helpers/env';
 import { hashPassword, verifyPassword } from '@/server/password';
-import { createSessionToken, newCsrfToken, readSessionToken, refreshSessionToken, SESSION_TTL_SECONDS } from '@/server/auth';
+import { createSessionToken, newCsrfToken, readSessionToken, refreshSessionToken, revokeAllSessions, SESSION_TTL_SECONDS } from '@/server/auth';
 import { runMigrations } from '@/server/db/migrate';
 import { setSecret } from '@/server/secrets';
 
@@ -50,6 +50,12 @@ describe('session tokens (HMAC-signed, 14-day)', () => {
     await setSecret('login.password_hash', 'new-hash');
     expect((await readSessionToken(token)).valid).toBe(false);
     expect((await readSessionToken(await createSessionToken())).valid).toBe(true);
+  });
+
+  it('revokes existing tokens on logout', async () => {
+    const token = await createSessionToken();
+    await revokeAllSessions();
+    expect((await readSessionToken(token)).valid).toBe(false);
   });
 
   it('does not upgrade a validated old session during password rotation', async () => {

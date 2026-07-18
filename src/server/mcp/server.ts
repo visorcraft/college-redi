@@ -7,6 +7,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import packageJson from '../../../package.json';
 import { callTool } from '../tools/call';
+import { publicErrorMessage } from '../tools/errors';
 import { getAllTools } from '../tools/registry';
 
 export { verifyMcpToken } from '../tools/mcpTokens';
@@ -113,7 +114,7 @@ export function buildMcpServer(actor: string): Server {
       return {
         content: [{
           type: 'text' as const,
-          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error: ${publicErrorMessage(error)}`,
         }],
         isError: true,
       };
@@ -137,7 +138,7 @@ export function buildMcpServer(actor: string): Server {
       data = await resource.load(actor);
     } catch (error) {
       data = {
-        error: error instanceof Error ? error.message : String(error),
+        error: publicErrorMessage(error),
       };
     }
     return {

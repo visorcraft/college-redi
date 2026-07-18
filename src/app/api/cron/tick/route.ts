@@ -52,9 +52,14 @@ export async function POST(req: NextRequest) {
       });
     });
   } catch (error) {
+    console.error(JSON.stringify({
+      level: 'error',
+      msg: 'cron tick failed',
+      error_name: error instanceof Error ? error.name : typeof error,
+    }));
     return NextResponse.json({
       ok: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: 'Cron tick failed. Check server logs.',
     }, { status: 500 });
   }
 }

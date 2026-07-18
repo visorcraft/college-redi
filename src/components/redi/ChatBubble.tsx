@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { renderMarkdownLite } from './markdownLite';
 import { toolActivityLine } from './rediText';
+import { csrfHeaders } from '@/lib/api';
 
 const THINK_RE = /<think>[\s\S]*?(?:<\/think>|$)/g;
 function stripThinking(text: string): string {
@@ -60,19 +61,12 @@ const CELEBRATE_TOOLS = new Set([
   'accept_event',
 ]);
 
-function csrfHeader(): Record<string, string> {
-  const match = document.cookie.match(/(?:^|;\s*)redi_csrf=([^;]+)/);
-  return match
-    ? { 'x-csrf-token': decodeURIComponent(match[1]) }
-    : {};
-}
-
 function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(path, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      ...csrfHeader(),
+      ...csrfHeaders(),
       ...(init.headers ?? {}),
     },
   });
@@ -234,7 +228,11 @@ export function ChatBubble({
         // ponytail: AI took too long - abort the stream and tell the user instead of letting
         // the bubble spin forever.
         setErrorText('Sorry, my AI brain may not know how to respond to that!');
-        try { void reader?.cancel(); } catch {}
+        try {
+          void reader?.cancel();
+        } catch (cancelError) {
+          console.debug('Chat stream cleanup failed', cancelError instanceof Error ? cancelError.name : 'UnknownError');
+        }
       }, AI_RESPONSE_TIMEOUT_MS);
       for (;;) {
         const { done, value } = await reader.read();

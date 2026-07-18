@@ -21,6 +21,19 @@ export class ConfirmRequiredError extends ToolError {
   }
 }
 
+export function publicErrorMessage(err: unknown): string {
+  return err instanceof ToolError
+    || (err instanceof Error && [
+      'AiNotConfiguredError',
+      'ToolConfirmationRequiredError',
+      'ToolNotFoundError',
+      'ToolValidationError',
+      'ZodError',
+    ].includes(err.name))
+    ? err.message
+    : 'Something went wrong. Please try again.';
+}
+
 export function errorResponse(err: unknown): Response {
   if (err instanceof ToolError) {
     return Response.json({ error: { code: err.code, message: err.message } }, { status: err.httpStatus });
@@ -43,7 +56,7 @@ export function errorResponse(err: unknown): Response {
     error_name: err instanceof Error ? err.name : typeof err,
   }));
   return Response.json(
-    { error: { code: 'internal', message: 'Something went wrong. Please try again.' } },
+    { error: { code: 'internal', message: publicErrorMessage(err) } },
     { status: 500 },
   );
 }

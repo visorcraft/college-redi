@@ -7,13 +7,17 @@ function readCookie(name: string): string {
   return match ? decodeURIComponent(match[1]) : '';
 }
 
-export async function apiFetch(path: string, options: { method?: string; body?: unknown } = {}) {
+export function csrfHeaders(): Record<string, string> {
   const csrf = readCookie(CSRF_COOKIE);
+  return csrf ? { [CSRF_HEADER]: csrf } : {};
+}
+
+export async function apiFetch(path: string, options: { method?: string; body?: unknown } = {}) {
   const res = await fetch(path, {
     method: options.method ?? 'GET',
     headers: {
       'content-type': 'application/json',
-      ...(csrf ? { [CSRF_HEADER]: csrf } : {}),
+      ...csrfHeaders(),
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });

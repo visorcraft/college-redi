@@ -262,14 +262,15 @@ export async function withSqlTransaction<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
-export function lit(value: string | number | boolean | Date | null): string {
-  if (value === null) return 'NULL';
+export function lit(value: string | number | bigint | boolean | Date | null | undefined): string {
+  if (value === null || value === undefined) return 'NULL';
   if (value instanceof Date) return `'${value.toISOString()}'`;
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new Error('refusing non-finite number literal');
     return String(value);
   }
+  if (typeof value === 'bigint') return value.toString();
   return `'${value.replace(/'/g, "''")}'`;
 }
 

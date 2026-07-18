@@ -238,11 +238,19 @@ export async function runRegistrationSweepJob(
       },
     )) enqueued += 1;
   };
-  for (const term of await sqlRows<TermRow>(`SELECT * FROM terms`)) {
+  const [terms, countRows] = await Promise.all([
+    sqlRows<TermRow>('SELECT * FROM terms'),
+    sqlRows<{ term_id: string; n: number }>(
+      `SELECT term_id, COUNT(*) AS n FROM planned_courses ` +
+      `WHERE status IN ('planned', 'waitlisted') GROUP BY term_id`,
+    ),
+  ]);
+  const unregisteredByTerm = new Map(
+    countRows.map((row) => [row.term_id, Number(row.n)]),
+  );
+  for (const term of terms) {
     signal?.throwIfAborted();
-    const unregistered = Number((await sqlRows<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM planned_courses WHERE term_id = ${lit(term.id)} AND status IN ('planned', 'waitlisted')`,
-    ))[0]?.n ?? 0);
+    const unregistered = unregisteredByTerm.get(term.id) ?? 0;
     if (term.registration_opens_at && unregistered > 0) {
       const opensMs = new Date(term.registration_opens_at).getTime();
       const untilOpen = opensMs - now.getTime();

@@ -7,6 +7,7 @@ import { getSettings } from '../settings';
 import { getSecret } from '../secrets';
 import { lit, sqlExec } from '../db/sql';
 import { getAiClient, AiNotConfiguredError } from '../ai/client';
+import { assertPublicNetworkHost } from '../network';
 
 type Ctx = { actor: string };
 const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -123,6 +124,7 @@ async function sendSmtpMail(subject: string, text: string, candidate: SmtpTestPa
   if (!smtp?.host || !smtp?.username || !smtp?.personal_email) {
     return { ok: false as const, error: 'not_configured', message: 'Fill in the SMTP host, username, and your personal email first.' };
   }
+  await assertPublicNetworkHost(smtp.host);
   const stored = candidatePassword
     ? { error: null, value: candidatePassword }
     : await requireSecret('smtp.password', 'Save your SMTP password first.');
@@ -163,7 +165,7 @@ async function sendTwilioSms(body: string, candidate: TwilioTestParams = {}) {
     : await requireSecret('twilio.auth_token', 'Save your Twilio auth token first.');
   if (stored.error) return stored.error;
   try {
-    const client = twilio(t.account_sid, stored.value!);
+    const client = twilio(t.account_sid, stored.value!, { timeout: CONNECTION_TEST_TIMEOUT_MS });
     await client.api.accounts(t.account_sid).fetch();
     const msg = await client.messages.create({ from: t.from_number, to: t.to_number, body });
     return { ok: true as const, message_sid: msg.sid };
@@ -185,6 +187,7 @@ const testImapConnection = {
     if (!imap?.host || !imap?.username) {
       return { ok: false, error: 'not_configured', message: 'Fill in the IMAP host and username first.' };
     }
+    await assertPublicNetworkHost(imap.host);
     const stored = candidatePassword
       ? { error: null, value: candidatePassword }
       : await requireSecret('imap.password', 'Save your IMAP password first.');
@@ -207,7 +210,13 @@ const testImapConnection = {
     } catch (err) {
       return { ok: false, error: 'connection_failed', message: errMsg(err) };
     } finally {
-      await client.logout().catch(() => {});
+      await client.logout().catch((error) => {
+        console.warn(JSON.stringify({
+          level: 'warn',
+          msg: 'IMAP test logout failed',
+          error_name: error instanceof Error ? error.name : 'UnknownError',
+        }));
+      });
     }
   },
 };

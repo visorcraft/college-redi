@@ -29,10 +29,10 @@ export async function createConversation(title = 'New chat'): Promise<ChatConver
   return row;
 }
 
-export async function listConversations(): Promise<ChatConversationRow[]> {
+export async function listConversations(limit = 100): Promise<ChatConversationRow[]> {
   return sqlRows<ChatConversationRow>(
     'SELECT id, title, created_at, updated_at FROM chat_conversations ' +
-    'ORDER BY updated_at DESC, id DESC',
+    `ORDER BY updated_at DESC, id DESC LIMIT ${Math.max(1, Math.floor(limit))}`,
   );
 }
 
@@ -71,9 +71,9 @@ export async function appendMessage(input: {
 
 export async function listMessages(
   conversationId: string,
-  limit?: number,
+  limit = 200,
 ): Promise<ChatMessageRow[]> {
-  const cap = limit === undefined ? '' : ` LIMIT ${Math.max(1, Math.floor(limit))}`;
+  const cap = ` LIMIT ${Math.max(1, Math.floor(limit))}`;
   const rows = await sqlRows<ChatMessageRow>(
     'SELECT id, conversation_id, role, content, tool_calls, created_at ' +
     `FROM chat_messages WHERE conversation_id = ${lit(conversationId)} ` +
