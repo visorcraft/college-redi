@@ -16,7 +16,7 @@ const LINKS = [
 export function AppNav() {
   if (usePathname() === '/wizard') return null;
   const signOut = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', redirect: 'manual' });
+    await (await fetch('/api/auth/logout', { method: 'POST' })).text();
     window.location.assign('/login');
   };
   return (

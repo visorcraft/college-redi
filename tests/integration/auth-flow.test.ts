@@ -132,7 +132,7 @@ describe('auth flow (booted app, temp data dir)', () => {
 
   it('logout clears the session; login with the wrong password is 401', async () => {
     const out = await fetch(`${srv.baseUrl}/api/auth/logout`, { method: 'POST', headers: { cookie: cookieHeader(jar) }, redirect: 'manual' });
-    expect(out.status).toBe(303);
+    expect(out.status).toBe(204);
     jarFrom(out, jar);
     const root = await fetch(`${srv.baseUrl}/`, {
       headers: { cookie: cookieHeader(jar) },
