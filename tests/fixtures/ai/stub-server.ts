@@ -55,6 +55,7 @@ export async function startStubAiServer(replies: StubReply[]): Promise<StubServe
           choices: [{ index: 0, delta, finish_reason: finish }],
         });
         if (toolCalls.length) {
+          if (reply.content) send(chunk({ role: 'assistant', content: reply.content }));
           for (const [index, toolCall] of toolCalls.entries()) {
             send(chunk({
               tool_calls: [{

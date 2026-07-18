@@ -245,7 +245,7 @@ describe('chat and Redi status routes', () => {
       { params: Promise.resolve({ id: created.id }) },
     );
     expect((await readSse(proposed)).some((event) =>
-      String(event.data.text).includes('Confirm this exact sensitive action?')))
+      String(event.data.text).includes('Create a new MCP access token?')))
       .toBe(true);
 
     const confirmed = await messages.POST(

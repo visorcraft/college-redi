@@ -28,6 +28,17 @@ describe('renderMarkdownLite', () => {
     expect(html).not.toContain('<script>alert');
     expect(html).toContain('&lt;script&gt;');
   });
+
+  it('hides legacy confirmation internals', () => {
+    const html = renderToStaticMarkup(renderMarkdownLite(
+      'Confirm this exact destructive action?\n' +
+      'delete_task {"id":"f3b3aa20-4c08-4b2b-8ce0-0b149ee50b45"}\n' +
+      'Reply yes to confirm. Anything else cancels it.',
+    ));
+    expect(html).toContain('Delete this task permanently?');
+    expect(html).not.toContain('delete_task');
+    expect(html).not.toContain('f3b3aa20');
+  });
 });
 
 describe('toolActivityLine', () => {

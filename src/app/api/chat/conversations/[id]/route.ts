@@ -3,6 +3,7 @@ import {
   getConversation,
   listMessages,
 } from '../../../../../server/chat/store';
+import { displayPendingConfirmation } from '../../../../../server/ai/agent';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,8 +20,12 @@ export async function GET(
       { status: 404 },
     );
   }
+  const messages = await listMessages(id, 200);
+  if (messages.length) {
+    messages[messages.length - 1] = await displayPendingConfirmation(messages.at(-1)!);
+  }
   return NextResponse.json({
     conversation,
-    messages: await listMessages(id, 200),
+    messages,
   });
 }

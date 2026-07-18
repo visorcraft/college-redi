@@ -100,6 +100,10 @@ describe('runDegreeImport', () => {
       expect(result.draft.program.total_credits_required).toBe(120);
       expect(result.draft.requirements.length).toBe(4);
     }
+    expect(createMock.mock.calls[0]?.[0]).toMatchObject({
+      model: 'test-model',
+      reasoning_effort: 'medium',
+    });
   });
 
   it('retries once with validation errors appended, then succeeds', async () => {

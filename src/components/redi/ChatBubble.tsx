@@ -15,6 +15,19 @@ function stripThinking(text: string): string {
   return text.replace(THINK_RE, '').replace(/<\/think>/g, '').trim();
 }
 
+const THINKING_DOT_FRAMES = ['.', '..', '...', ' ..', '  .'];
+const THINKING_DOT_INTERVAL_MS = 400;
+const AI_RESPONSE_TIMEOUT_MS = 30_000;
+
+function AnimatedDots() {
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setFrame((f) => (f + 1) % THINKING_DOT_FRAMES.length), THINKING_DOT_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+  return <span aria-label="Thinking" className="inline-block w-6">{THINKING_DOT_FRAMES[frame]}</span>;
+}
+
 export interface ChatBubbleProps {
   open: boolean;
   aiConfigured: boolean;
@@ -78,6 +91,7 @@ export function ChatBubble({
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusyState] = useState(false);
+  const [thinking, setThinking] = useState(false);
   const [activity, setActivity] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -179,6 +193,10 @@ export function ChatBubble({
       { role: 'assistant', content: '' },
     ]);
     setBusy(true);
+    setThinking(true);
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
     try {
       let id = activeId;
@@ -206,10 +224,18 @@ export function ChatBubble({
         );
       }
 
-      const reader = response.body.getReader();
+      const r = response.body.getReader();
+      reader = r;
       const decoder = new TextDecoder();
       let buffer = '';
       let ephemeralText = '';
+      let firstDeltaReceived = false;
+      timeoutId = setTimeout(() => {
+        // ponytail: AI took too long - abort the stream and tell the user instead of letting
+        // the bubble spin forever.
+        setErrorText('Sorry, my AI brain may not know how to respond to that!');
+        try { void reader?.cancel(); } catch {}
+      }, AI_RESPONSE_TIMEOUT_MS);
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -223,6 +249,10 @@ export function ChatBubble({
           if (!event || !raw) continue;
           const data = JSON.parse(raw);
           if (event === 'delta') {
+            if (!firstDeltaReceived) {
+              firstDeltaReceived = true;
+              setThinking(false);
+            }
             const visible = stripThinking(data.text);
             if (visible) patchLastAssistant((content) => content + visible);
           } else if (event === 'tool') {
@@ -244,6 +274,7 @@ export function ChatBubble({
               `\n\nMCP token, shown once:\n\`${data.result.token}\``;
             patchLastAssistant((content) => content + ephemeralText);
           } else if (event === 'done') {
+            if (!firstDeltaReceived) setThinking(false);
             patchLastAssistant(() => stripThinking(data.text) + ephemeralText);
           } else if (event === 'error') {
             setErrorText(String(data.message));
@@ -257,6 +288,8 @@ export function ChatBubble({
         error instanceof Error ? error.message : 'Redi hit a snag - try again.',
       );
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      setThinking(false);
       setBusy(false);
     }
   }, [activeId, busy, loadConversations, setBusy]);
@@ -380,24 +413,37 @@ export function ChatBubble({
                 ))}
               </div>
             )}
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={
-                  message.role === 'user'
-                    ? 'ml-8 rounded-2xl rounded-br-md bg-[#1F2D50] px-3 py-2 text-sm text-white'
-                    : 'mr-8 rounded-[1.5rem] rounded-bl-md bg-white px-3 py-2 text-sm text-[#1F2D50] shadow-sm'
-                }
-              >
-                {message.role === 'assistant'
-                  ? renderMarkdownLite(message.content)
-                  : message.content}
-              </div>
-            ))}
+            {messages.map((message, index) => {
+              const isEmptyAssistant = message.role === 'assistant' && message.content.length === 0;
+              if (isEmptyAssistant) return null;
+              return (
+                <div
+                  key={index}
+                  className={
+                    message.role === 'user'
+                      ? 'ml-8 rounded-2xl rounded-br-md bg-[#1F2D50] px-3 py-2 text-sm text-white'
+                      : 'mr-8 rounded-[1.5rem] rounded-bl-md bg-white px-3 py-2 text-sm text-[#1F2D50] shadow-sm'
+                  }
+                >
+                  {message.role === 'assistant'
+                    ? renderMarkdownLite(message.content)
+                    : message.content}
+                </div>
+              );
+            })}
             {activity && (
               <p className="text-xs italic text-slate-500" role="status">
                 {activity}
               </p>
+            )}
+            {thinking && (
+              <div
+                className="mr-8 inline-flex items-center gap-1 rounded-[1.5rem] rounded-bl-md bg-white px-3 py-2 text-sm text-[#1F2D50] shadow-sm"
+                role="status"
+                aria-live="polite"
+              >
+                <AnimatedDots />
+              </div>
             )}
             {errorText && (
               <p className="text-xs text-red-600" role="alert">

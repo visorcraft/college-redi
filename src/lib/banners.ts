@@ -21,7 +21,10 @@ const CHANNEL_BANNERS: Record<string, { label: string; href: string }> = {
 interface BannerSettings {
   wizard_state?: { skipped_steps?: string[] };
   ui?: { setup_dismissed?: string[] };
-  imap?: { last_error?: string | null };
+  ai?: { model?: string };
+  imap?: { host?: string; last_error?: string | null };
+  smtp?: { host?: string };
+  twilio?: { account_sid?: string };
 }
 
 export function buildBanners(settings: BannerSettings, status: unknown): Banner[] {

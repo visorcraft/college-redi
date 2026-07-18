@@ -3,6 +3,14 @@ import React from 'react';
 /** Render safe chat formatting without accepting raw HTML. */
 export function renderMarkdownLite(text: string): React.ReactNode {
   text = text.replace(/<!-- redi-confirm:[\s\S]*?(?:-->|$)/g, '').trimEnd();
+  text = text.replace(
+    /Confirm this exact (destructive|sensitive) action\?\n([a-z_]+) [^\n]+\nReply yes to confirm\. Anything else cancels it\./g,
+    (_, kind: string, tool: string) => (
+      tool === 'delete_task'
+        ? 'Delete this task permanently?'
+        : 'Continue with this ' + (kind === 'destructive' ? 'permanent' : 'sensitive') + ' action?'
+    ) + '\n\nReply yes to confirm. Anything else cancels it.',
+  );
   const blocks: React.ReactNode[] = [];
   let bullets: React.ReactNode[] = [];
 
