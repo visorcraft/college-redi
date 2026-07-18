@@ -18,13 +18,12 @@ export default function LoginPage() {
     let cancelled = false;
     fetch('/api/auth/me')
       .then((r) => r.json())
-      .then((me: { passwordSet: boolean; setupToken?: string }) => {
+      .then((me: { passwordSet: boolean }) => {
         if (cancelled) return;
         if (me.passwordSet) {
           setMode('login');
         } else {
           setMode('setup');
-          if (me.setupToken) setSetupToken(me.setupToken);
         }
       })
       .catch(() => {
@@ -80,6 +79,26 @@ export default function LoginPage() {
           <p className="text-center text-sm text-[#1F2D50]/60">Loading…</p>
         ) : (
           <form onSubmit={onSubmit} className="space-y-4">
+            {isSetup && (
+              <div>
+                <label htmlFor="setup-token" className="mb-1 block text-sm font-medium">
+                  Setup token
+                </label>
+                <input
+                  id="setup-token"
+                  name="setup-token"
+                  type="password"
+                  required
+                  autoComplete="off"
+                  value={setupToken}
+                  onChange={(e) => setSetupToken(e.target.value)}
+                  className="w-full rounded-xl border border-[#1F2D50]/20 px-3 py-2 outline-none focus:border-[#1F2D50] focus:ring-2 focus:ring-[#1F2D50]/20"
+                />
+                <p className="mt-1 text-xs text-[#1F2D50]/60">
+                  Paste REDI_SETUP_TOKEN from DATA_DIR/.env.
+                </p>
+              </div>
+            )}
             <div>
               <label htmlFor="password" className="mb-1 block text-sm font-medium">
                 Password
@@ -96,9 +115,6 @@ export default function LoginPage() {
                 className="w-full rounded-xl border border-[#1F2D50]/20 px-3 py-2 outline-none focus:border-[#1F2D50] focus:ring-2 focus:ring-[#1F2D50]/20"
               />
             </div>
-            {isSetup && (
-              <input type="hidden" name="setup-token" value={setupToken} />
-            )}
             {isSetup && (
               <div>
                 <label htmlFor="confirm" className="mb-1 block text-sm font-medium">

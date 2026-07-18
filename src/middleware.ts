@@ -5,6 +5,7 @@ import {
   contentSecurityPolicy,
   csrfFailure,
   ensureCsrfCookie,
+  isExpensiveApiPath,
   isSecureRequest,
   requestRateLimitExceeded,
   rateLimitResponse,
@@ -52,6 +53,16 @@ export default async function middleware(req: NextRequest) {
       'mcp',
       RATE_LIMITS.mcp.limit,
       RATE_LIMITS.mcp.windowMs,
+    )
+  ) return secure(rateLimitResponse());
+  if (
+    req.method === 'POST'
+    && isExpensiveApiPath(pathname)
+    && requestRateLimitExceeded(
+      req,
+      'expensive',
+      RATE_LIMITS.expensive.limit,
+      RATE_LIMITS.expensive.windowMs,
     )
   ) return secure(rateLimitResponse());
   const csrf = csrfFailure(req);

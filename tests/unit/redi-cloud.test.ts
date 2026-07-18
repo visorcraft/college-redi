@@ -26,7 +26,7 @@ describe('RediCloud visual states', () => {
 
   it('passes the widget state through without a lossy mood mapping', () => {
     const source = readFileSync('src/components/redi/RediWidget.tsx', 'utf8');
-    expect(source).toContain('<RediCloud state={state} size={64} />');
+    expect(source).toContain('<RediCloud state={state} size={77} />');
     expect(source).not.toContain('moodByState');
   });
 });

@@ -3,16 +3,16 @@ import { lit, sqlRows } from '../../../../server/db/sql';
 import { getSecret } from '../../../../server/secrets';
 import { getSettings } from '../../../../server/settings';
 import { callTool } from '../../../../server/tools/call';
+import { hasAiConfiguration } from '../../../../server/ai/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const settings = await getSettings();
-  const aiConfigured = Boolean(
-    settings.ai.base_url
-      && settings.ai.model
-      && await getSecret('ai.api_key'),
+  const aiConfigured = hasAiConfiguration(
+    await getSecret('ai.api_key'),
+    settings.ai,
   );
 
   let unreadCount = 0;

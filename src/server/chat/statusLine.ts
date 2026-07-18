@@ -26,7 +26,7 @@ export async function buildDashboardLine(): Promise<{
   try {
     const result = await callTool(
       'get_system_status',
-      { probe_connections: false, probe_ai: true },
+      { probe_connections: false, probe_ai: false },
       CONTEXT,
     );
     const status = result && typeof result === 'object'
@@ -35,7 +35,7 @@ export async function buildDashboardLine(): Promise<{
     const ai = status.ai && typeof status.ai === 'object'
       ? status.ai as Record<string, unknown>
       : {};
-    if (ai.reachable === false || ai.configured === false) aiOk = false;
+    if (ai.configured === false) aiOk = false;
   } catch {
     // Status failure should not break the dashboard.
   }

@@ -31,6 +31,13 @@ export interface AiClientOverrides {
   effort?: 'low' | 'medium' | 'high';
 }
 
+export function hasAiConfiguration(
+  apiKey: string | null,
+  ai: { base_url: string; model: string },
+): boolean {
+  return Boolean(apiKey && ai.base_url.trim() && ai.model.trim());
+}
+
 interface Usage {
   prompt_tokens?: number;
   completion_tokens?: number;

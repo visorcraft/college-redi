@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/server/tools/call', () => ({ callTool: vi.fn() }));
+vi.mock('../../src/server/tools/tasks', () => ({
+  materializePendingChecklist: vi.fn().mockResolvedValue({ created: 0 }),
+}));
 
 async function subject() {
   vi.resetModules();
@@ -15,10 +18,10 @@ async function subject() {
 describe('buildDashboardLine', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('reports AI trouble first', async () => {
+  it('reports missing AI configuration first without probing the provider', async () => {
     const { buildDashboardLine, callTool } = await subject();
     callTool.mockImplementation(async (name: string) => {
-      if (name === 'get_system_status') return { ai: { reachable: false } };
+      if (name === 'get_system_status') return { ai: { configured: false } };
       return name === 'list_notifications'
         ? { notifications: [] }
         : { tasks: [] };
@@ -26,9 +29,22 @@ describe('buildDashboardLine', () => {
     expect((await buildDashboardLine()).line).toContain('AI brain is offline');
     expect(callTool).toHaveBeenCalledWith(
       'get_system_status',
-      { probe_connections: false, probe_ai: true },
+      { probe_connections: false, probe_ai: false },
       { actor: 'system' },
     );
+  });
+
+  it('does not call configured chat offline because an earlier probe failed', async () => {
+    const { buildDashboardLine, callTool } = await subject();
+    callTool.mockImplementation(async (name: string) => {
+      if (name === 'get_system_status') {
+        return { ai: { configured: true, reachable: false } };
+      }
+      return name === 'list_notifications'
+        ? { notifications: [] }
+        : { tasks: [] };
+    });
+    expect((await buildDashboardLine()).line).toBe('All clear - nothing due today ☀️');
   });
 
   it('leads with what is due today, then unread counts, then all-clear', async () => {

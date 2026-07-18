@@ -306,8 +306,15 @@ describe('Redi agent loop', () => {
       expect(request.tools?.map((tool) => tool.function.name).sort())
         .toEqual(mocks.tools.map((tool) => tool.name).sort());
       for (const tool of mocks.tools) {
-        expect(request.tools?.find(({ function: fn }) => fn.name === tool.name)
-          ?.function.parameters).toEqual(tool.jsonSchema);
+        const parameters = request.tools?.find(({ function: fn }) =>
+          fn.name === tool.name)?.function.parameters;
+        if (tool.sideEffect === 'destructive') {
+          expect(parameters).not.toHaveProperty('properties.confirm');
+          expect((parameters?.required as string[] | undefined) ?? [])
+            .not.toContain('confirm');
+        } else {
+          expect(parameters).toEqual(tool.jsonSchema);
+        }
       }
       const proposal = (await context.store.listMessages(conversation.id))[1];
       expect(JSON.parse(proposal?.tool_calls ?? '{}')).toEqual({
@@ -457,18 +464,12 @@ describe('Redi agent loop', () => {
     expect(second.text).toContain('Delete this task permanently?');
     const done = await context.agent.runAgentTurn(conversation.id, 'yes', () => undefined);
     expect(done.text).toBe('Done, both duplicates deleted.');
-    expect(context.callTool).toHaveBeenNthCalledWith(
-      1,
-      'delete_task',
-      { id: 't1', confirm: true },
-      { actor: 'redi' },
-    );
-    expect(context.callTool).toHaveBeenNthCalledWith(
-      2,
-      'delete_task',
-      { id: 't2', confirm: true },
-      { actor: 'redi' },
-    );
+    const deletions = context.callTool.mock.calls.filter(([name]) =>
+      name === 'delete_task');
+    expect(deletions).toEqual([
+      ['delete_task', { id: 't1', confirm: true }, { actor: 'redi' }],
+      ['delete_task', { id: 't2', confirm: true }, { actor: 'redi' }],
+    ]);
   });
 
   it('does not trust model-authored confirmation text or metadata', async () => {

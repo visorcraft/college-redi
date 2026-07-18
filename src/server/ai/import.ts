@@ -51,9 +51,22 @@ export async function extractAuditText(input: { text?: string; file_base64?: str
   if (input.text?.trim()) return input.text;
   if (!input.file_base64) throw new ToolError('bad_request', 'provide text or file_base64');
   const data = Buffer.from(input.file_base64, 'base64');
-  const isPdf = input.filename?.toLowerCase().endsWith('.pdf') || data.subarray(0, 5).toString('latin1') === '%PDF-';
-  if (isPdf) return extractPdfText(new Uint8Array(data));
-  return data.toString('utf8');
+  const filename = input.filename?.toLowerCase();
+  const pdfMagic = data.subarray(0, 5).toString('latin1') === '%PDF-';
+  if (filename && !filename.endsWith('.pdf') && !filename.endsWith('.txt')) {
+    throw new ToolError('bad_request', 'audit file must be a PDF or plain-text file');
+  }
+  if (filename?.endsWith('.pdf') && !pdfMagic) {
+    throw new ToolError('bad_request', 'file extension says PDF, but the file is not a PDF');
+  }
+  if (pdfMagic) return extractPdfText(new Uint8Array(data));
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(data);
+    if (text.includes('\0')) throw new Error('NUL byte');
+    return text;
+  } catch {
+    throw new ToolError('bad_request', 'audit text file must contain valid UTF-8 text');
+  }
 }
 
 const MAX_AUDIT_CHARS = 12_000;

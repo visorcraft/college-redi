@@ -105,6 +105,8 @@ const FETCH_QUERY = {
   internalDate: true,
   source: true,
 };
+const IMAP_CONNECTION_TIMEOUT_MS = 30_000;
+const IMAP_SOCKET_TIMEOUT_MS = 120_000;
 
 export function htmlToText(html: string): string {
   return html
@@ -204,6 +206,9 @@ class ImapFlowConnection implements ImapConnection {
       secure: config.tls,
       auth: { user: config.username, pass: config.password },
       logger: false,
+      connectionTimeout: IMAP_CONNECTION_TIMEOUT_MS,
+      greetingTimeout: IMAP_CONNECTION_TIMEOUT_MS,
+      socketTimeout: IMAP_SOCKET_TIMEOUT_MS,
     });
   }
 

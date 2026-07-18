@@ -111,4 +111,25 @@ describe('import routes', () => {
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
   });
+
+  it('rejects oversized and unsupported multipart uploads', async () => {
+    const oversized = await routes.programsImport.POST!(
+      new Request('http://test/api/programs/import', {
+        method: 'POST',
+        headers: {
+          'content-type': 'multipart/form-data; boundary=test',
+          'content-length': String(11 * 1024 * 1024),
+        },
+        body: '--test--',
+      }),
+    );
+    expect(oversized.status).toBe(413);
+
+    const form = new FormData();
+    form.append('file', new Blob(['<html>bad</html>'], { type: 'text/html' }), 'audit.html');
+    const unsupported = await routes.programsImport.POST!(
+      new Request('http://test/api/programs/import', { method: 'POST', body: form }),
+    );
+    expect(unsupported.status).toBe(400);
+  });
 });

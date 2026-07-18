@@ -3,7 +3,7 @@ import { KitDatabase } from '@visorcraft/mongreldb-kit';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
 import { z } from 'zod';
-import { getAiClient } from '../ai/client';
+import { getAiClient, hasAiConfiguration } from '../ai/client';
 import { getConfig } from '../config';
 import { getDb } from '../db/client';
 import { getSecret } from '../secrets';
@@ -242,10 +242,11 @@ export const getSystemStatusTool: Tool = defineTool({
       smtp: `${fingerprint(smtpPassword)}:${settings.smtp.host}:${settings.smtp.port}:${settings.smtp.username}`,
       twilio: `${fingerprint(twilioToken)}:${settings.twilio.account_sid}`,
     };
+    const aiConfigured = hasAiConfiguration(aiKey, settings.ai);
     const now = Date.now();
     if (params.probe_connections) {
       const [ai, smtp, twilioStatus] = await Promise.all([
-        refreshAiHealth(aiKey !== null, healthKeys.ai),
+        refreshAiHealth(aiConfigured, healthKeys.ai),
         checkSmtp(settings, smtpPassword),
         checkTwilio(settings, twilioToken),
       ]);
@@ -261,7 +262,7 @@ export const getSystemStatusTool: Tool = defineTool({
         || now - recentHealth.ai.checkedAt >= HEALTH_TTL_MS
       )
     ) {
-      const ai = await refreshAiHealth(aiKey !== null, healthKeys.ai);
+      const ai = await refreshAiHealth(aiConfigured, healthKeys.ai);
       recentHealth.ai = {
         key: healthKeys.ai,
         checkedAt: Date.now(),
@@ -286,7 +287,7 @@ export const getSystemStatusTool: Tool = defineTool({
     return {
       db: dbStatus,
       ai: {
-        configured: aiKey !== null,
+        configured: aiConfigured,
         base_url: settings.ai.base_url,
         model: settings.ai.model,
         effort: settings.ai.effort,

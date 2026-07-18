@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { sendChatMessageSchema } from '../../../../../../lib/schemas/chat';
 import { runAgentTurn } from '../../../../../../server/ai/agent';
 import {
+  AiDailyCapExceededError,
   AiNotConfiguredError,
   getAiClient,
 } from '../../../../../../server/ai/client';
@@ -72,8 +73,19 @@ export async function POST(
           } else if (event.type === 'done') send('done', { text: event.text });
         });
       } catch (error) {
+        const expected = error instanceof AiDailyCapExceededError
+          || error instanceof AiNotConfiguredError;
+        if (!expected) {
+          console.error(JSON.stringify({
+            level: 'error',
+            msg: 'chat turn failed',
+            error_name: error instanceof Error ? error.name : typeof error,
+          }));
+        }
         send('error', {
-          message: error instanceof Error ? error.message : 'Redi hit a snag',
+          message: expected
+            ? error.message
+            : 'Redi hit a snag. Please try again.',
         });
       } finally {
         controller.close();

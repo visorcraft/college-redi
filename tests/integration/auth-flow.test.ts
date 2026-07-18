@@ -49,6 +49,7 @@ describe('auth flow (booted app, temp data dir)', () => {
   it('GET /api/auth/me reports setup state before and after setup', async () => {
     const before = await (await fetch(`${srv.baseUrl}/api/auth/me`)).json();
     expect(before).toMatchObject({ authenticated: false, passwordSet: false });
+    expect(before).not.toHaveProperty('setupToken');
     const res = await fetch(`${srv.baseUrl}/api/auth/setup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

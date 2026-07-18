@@ -87,6 +87,22 @@ describe('extractAuditText', () => {
     });
     expect(text).toContain('CS 101');
   });
+
+  it('rejects unsupported, mislabeled, and binary files', async () => {
+    const plain = Buffer.from('not a PDF').toString('base64');
+    await expect(importModule.extractAuditText({
+      file_base64: plain,
+      filename: 'audit.pdf',
+    })).rejects.toThrow('file is not a PDF');
+    await expect(importModule.extractAuditText({
+      file_base64: plain,
+      filename: 'audit.html',
+    })).rejects.toThrow('PDF or plain-text');
+    await expect(importModule.extractAuditText({
+      file_base64: Buffer.from([0xff, 0xfe]).toString('base64'),
+      filename: 'audit.txt',
+    })).rejects.toThrow('valid UTF-8');
+  });
 });
 
 describe('runDegreeImport', () => {

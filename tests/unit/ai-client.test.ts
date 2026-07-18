@@ -21,6 +21,7 @@ vi.mock('openai', () => ({
 }));
 
 import {
+  hasAiConfiguration,
   AiDailyCapExceededError,
   AiNotConfiguredError,
   getAiClient,
@@ -37,6 +38,23 @@ beforeEach(async () => {
   create.mockClear();
 });
 afterEach(() => env.cleanup());
+
+describe('hasAiConfiguration', () => {
+  it('requires the key, base URL, and model', () => {
+    expect(hasAiConfiguration('sk-test', {
+      base_url: 'https://ai.example/v1',
+      model: 'model',
+    })).toBe(true);
+    expect(hasAiConfiguration(null, {
+      base_url: 'https://ai.example/v1',
+      model: 'model',
+    })).toBe(false);
+    expect(hasAiConfiguration('sk-test', {
+      base_url: ' ',
+      model: 'model',
+    })).toBe(false);
+  });
+});
 
 describe('getAiClient', () => {
   it('throws AiNotConfiguredError when no api key is stored', async () => {

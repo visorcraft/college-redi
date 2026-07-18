@@ -7,6 +7,7 @@ import {
   clientIp,
   csrfFailure,
   ensureCsrfCookie,
+  isExpensiveApiPath,
   isSecureRequest,
   rateLimitExceeded,
   requestRateLimitExceeded,
@@ -144,6 +145,13 @@ describe('CSRF double-submit', () => {
 });
 
 describe('rate limiter', () => {
+  it('recognizes paid and AI-backed routes', () => {
+    expect(isExpensiveApiPath('/api/programs/import')).toBe(true);
+    expect(isExpensiveApiPath('/api/chat/conversations/abc/messages')).toBe(true);
+    expect(isExpensiveApiPath('/api/notifications/test/sms')).toBe(true);
+    expect(isExpensiveApiPath('/api/tasks')).toBe(false);
+  });
+
   it('cheaply rejects excess login requests before the route runs', async () => {
     const previous = process.env.TRUST_PROXY_HOPS;
     process.env.TRUST_PROXY_HOPS = '1';

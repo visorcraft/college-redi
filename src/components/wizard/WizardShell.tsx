@@ -6,7 +6,6 @@ import { RediCloud } from '@/components/redi/RediCloud';
 import { apiFetch } from '@/lib/api';
 import { stepByN, advanceWizardState } from '@/lib/wizard';
 import type { SettingsSnapshot, WizardState, PendingChecklistItem } from '@/lib/schemas/settings';
-import type { WizardSubmitRef } from './useWizardSubmit';
 import { WelcomeStep } from './steps/WelcomeStep';
 import { LoginStep } from './steps/LoginStep';
 import { AiStep } from './steps/AiStep';
@@ -158,7 +157,7 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
         {step.id === 'checklist' && <ChecklistStep onSave={onSaveChecklist} busy={busy} submitRef={submitRef} />}
         {step.id === 'notifications' && <NotificationsStep settings={settings} onComplete={onComplete} busy={busy} preferBrowserTimezone submitRef={submitRef} />}
         {step.id === 'done' && <DoneStep settings={settings} secretFlags={secretFlags} onFinish={onFinish} busy={busy} submitRef={submitRef} />}
-        <div className="mt-6 flex gap-3">
+        <div className="mt-6 flex gap-3 pr-20 sm:pr-0">
           <button
             type="button"
             onClick={onBack}

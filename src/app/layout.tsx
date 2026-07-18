@@ -7,6 +7,7 @@ import { getSecret } from '@/server/secrets';
 import CsrfInit from '@/components/CsrfInit';
 import { AppNav } from '@/components/AppNav';
 import { readSessionToken, SESSION_COOKIE } from '@/server/auth';
+import { hasAiConfiguration } from '@/server/ai/client';
 
 export const metadata: Metadata = {
   title: 'Redi',
@@ -23,7 +24,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     authenticated = (await readSessionToken(
       (await cookies()).get(SESSION_COOKIE)?.value,
     )).valid;
-    aiConfigured = Boolean((await getSecret('ai.api_key')) && (await getSettings()).ai?.model);
+    aiConfigured = hasAiConfiguration(
+      await getSecret('ai.api_key'),
+      (await getSettings()).ai,
+    );
   } catch {
     aiConfigured = false; // DB not ready yet (e.g. first boot before migrations)
   }

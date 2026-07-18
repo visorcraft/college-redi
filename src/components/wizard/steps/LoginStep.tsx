@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { PasswordField, PrimaryButton } from '@/components/ui/forms';
 import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
@@ -12,18 +12,6 @@ export function LoginStep({ hasPassword, onComplete, busy, submitRef }: {
   const [pw2, setPw2] = useState('');
   const [setupToken, setSetupToken] = useState('');
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (hasPassword) return;
-    let cancelled = false;
-    fetch('/api/auth/me')
-      .then((r) => r.json())
-      .then((me: { setupToken?: string }) => {
-        if (!cancelled && me.setupToken) setSetupToken(me.setupToken);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [hasPassword]);
 
   const continueFn = () => { void onComplete(); };
   useWizardSubmit(submitRef, hasPassword ? continueFn : () => { void save(); });
@@ -56,9 +44,14 @@ export function LoginStep({ hasPassword, onComplete, busy, submitRef }: {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold text-[#1F2D50]">Your login</h1>
+      <PasswordField
+        label="Setup token"
+        value={setupToken}
+        onChange={setSetupToken}
+        hint="Paste REDI_SETUP_TOKEN from DATA_DIR/.env."
+      />
       <PasswordField label="Password" value={pw1} onChange={setPw1} hint="At least 8 characters." />
       <PasswordField label="Confirm password" value={pw2} onChange={setPw2} />
-      <input type="hidden" name="setup-token" value={setupToken} readOnly />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       {!submitRef && <PrimaryButton onClick={save} disabled={busy}>Create password</PrimaryButton>}
     </div>

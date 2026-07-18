@@ -33,7 +33,6 @@ export function stripThinking(text: string): string {
 // only forwards visible text to the consumer. Handles tags split across chunks.
 function makeThinkFilter(): { feed: (chunk: string) => string } {
   let inThink = false;
-  let buffer = '';
   return {
     feed(chunk: string): string {
       let out = '';
@@ -42,10 +41,8 @@ function makeThinkFilter(): { feed: (chunk: string) => string } {
         if (inThink) {
           const close = remaining.indexOf('</think>');
           if (close === -1) {
-            buffer += remaining;
             remaining = '';
           } else {
-            buffer = '';
             inThink = false;
             remaining = remaining.slice(close + '</think>'.length);
           }

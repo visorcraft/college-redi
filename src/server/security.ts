@@ -8,6 +8,20 @@ const CSRF_EXEMPT = [
   /^\/api\/cron\/tick$/,
   /^\/api\/health$/,
 ];
+const EXPENSIVE_API_PATHS = new Set([
+  '/api/email/check',
+  '/api/programs/import',
+  '/api/settings/test/ai',
+  '/api/settings/test/imap',
+  '/api/settings/test/smtp',
+  '/api/settings/test/twilio',
+]);
+
+export function isExpensiveApiPath(pathname: string): boolean {
+  return EXPENSIVE_API_PATHS.has(pathname)
+    || /^\/api\/chat\/conversations\/[^/]+\/messages$/.test(pathname)
+    || /^\/api\/notifications\/test\/[^/]+$/.test(pathname);
+}
 
 export function applySecurityHeaders(
   response: NextResponse,
@@ -167,4 +181,5 @@ export const RATE_LIMITS = {
   login: { limit: 10, windowMs: 5 * 60_000 },
   cron: { limit: 12, windowMs: 60_000 },
   mcp: { limit: 240, windowMs: 60_000 },
+  expensive: { limit: 30, windowMs: 60_000 },
 } as const;

@@ -37,6 +37,13 @@ export function errorResponse(err: unknown): Response {
   if (err && typeof err === 'object' && (err as { name?: string }).name === 'AiNotConfiguredError') {
     return Response.json({ error: { code: 'ai_not_configured', message: (err as Error).message } }, { status: 503 });
   }
-  const message = err instanceof Error ? err.message : 'internal error';
-  return Response.json({ error: { code: 'internal', message } }, { status: 500 });
+  console.error(JSON.stringify({
+    level: 'error',
+    msg: 'unhandled API error',
+    error_name: err instanceof Error ? err.name : typeof err,
+  }));
+  return Response.json(
+    { error: { code: 'internal', message: 'Something went wrong. Please try again.' } },
+    { status: 500 },
+  );
 }
