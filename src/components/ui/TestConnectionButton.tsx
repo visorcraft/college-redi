@@ -35,7 +35,7 @@ export function TestConnectionButton({ endpoint, label = 'Test connection', show
       </button>
       {result && (
         <div role="status" className={`flex items-center gap-3 rounded-xl p-3 text-sm ${tone}`}>
-          {showRedi && <RediCloud mood={result.ok ? 'happy' : 'sad'} size={36} />}
+          {showRedi && <RediCloud mood={result.ok ? 'happy' : 'sad'} size={43} />}
           <span>{text}</span>
         </div>
       )}

@@ -30,7 +30,14 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
   const wizardState = settings.wizard_state ?? DEFAULT_WIZARD_STATE;
   const [stepN, setStepN] = useState(() => Math.min(Math.max(wizardState.current_step ?? 1, 1), 10));
   const [busy, setBusy] = useState(false);
+  const [raining, setRaining] = useState(false);
   const step = stepByN(stepN);
+
+  const onCloudClick = () => {
+    if (raining) return;
+    setRaining(true);
+    setTimeout(() => setRaining(false), 2000);
+  };
 
   useEffect(() => {
     if (!hasPassword && stepN === 1 && localStorage.getItem(PRE_AUTH_STEP_KEY) === '2') {
@@ -100,9 +107,31 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-6 p-6">
-      <RediCloud mood={step.id === 'done' ? 'happy' : 'idle'} size={96} />
-      <p className="text-center text-lg leading-relaxed text-[#1F2D50]">{step.redi}</p>
+    <main className="mx-auto flex min-h-screen max-w-[37.8rem] flex-col items-center justify-center gap-6 p-6">
+      <RediCloud
+        mood={step.id === 'done' ? 'happy' : 'idle'}
+        size={115}
+        state={raining ? 'raining' : step.id === 'done' ? 'celebrating' : 'idle'}
+        onClick={onCloudClick}
+        disabled={raining}
+      >
+        {raining && (
+          <span className="redi-rain-host" aria-hidden="true">
+            {[15, 30, 45, 55, 65, 75, 40, 25, 60, 85].map((left, i) => (
+              <span
+                key={i}
+                className="redi-rain-drop"
+                style={{ left: `${left}%`, animationDelay: `${(i % 5) * 0.12}s` }}
+              />
+            ))}
+          </span>
+        )}
+      </RediCloud>
+      <p className="text-center text-lg leading-relaxed text-[#1F2D50]">
+        {step.redi.split(/(?<=\.)\s+/).map((seg, i, arr) => (
+          <span key={i}>{seg}{i < arr.length - 1 && <br />}</span>
+        ))}
+      </p>
       <div className="w-full rounded-2xl bg-white p-6 shadow-sm">
         {step.id === 'welcome' && <WelcomeStep onComplete={onWelcomeComplete} busy={busy} />}
         {step.id === 'login' && <LoginStep hasPassword={hasPassword} onComplete={onLoginComplete} busy={busy} />}

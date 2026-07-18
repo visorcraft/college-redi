@@ -102,7 +102,7 @@ export function RediWidget({
         className="fixed bottom-6 right-6 z-50 rounded-full p-1 transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#FFC24B] motion-reduce:transition-none"
       >
         <span className="relative block" aria-hidden="true">
-          <RediCloud state={state} size={64} />
+          <RediCloud state={state} size={77} />
           {state === 'alert' && status.unreadCount > 0 && (
             <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FFC24B] px-1 text-[11px] font-bold text-[#1F2D50]">
               {status.unreadCount > 99 ? '99+' : status.unreadCount}

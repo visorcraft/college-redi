@@ -4,7 +4,7 @@ export interface WizardStepDef { n: number; id: string; title: string; skippable
 
 export const WIZARD_STEPS: readonly WizardStepDef[] = [
   { n: 1, id: 'welcome', title: 'Welcome', skippable: false,
-    redi: "Hi, I'm Redi ☁️ - I keep your degree on track. I plan your courses, watch registration windows, chase missing paperwork, and read your college email so you don't have to." },
+    redi: "Hey, listen! I'm Redi - I help keep your degree on track. I plan your courses, watch registration windows, chase missing paperwork, and read your college email so you don't have to." },
   { n: 2, id: 'login', title: 'Your login', skippable: false,
     redi: 'First, a password. This is a private, one-person app - this keeps it that way.' },
   { n: 3, id: 'ai', title: 'AI brain', skippable: true,

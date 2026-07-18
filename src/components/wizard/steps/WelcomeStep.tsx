@@ -12,7 +12,7 @@ export function WelcomeStep({ onComplete, busy }: { onComplete: () => Promise<vo
         <li>📋 <strong>Missing-item nudges</strong> - transcripts, vaccine records, forms: handled.</li>
         <li>📬 <strong>Email watching</strong> - I read your college inbox and summarize what matters.</li>
       </ul>
-      <p className="text-sm text-[#1F2D50]/70">This takes about 5 minutes, and you can skip anything and come back to it.</p>
+      <p className="text-sm text-[#1F2D50]/70">This takes a few minutes, and you can skip anything and come back later.</p>
       <PrimaryButton onClick={() => onComplete()} disabled={busy}>Let&apos;s go</PrimaryButton>
     </div>
   );

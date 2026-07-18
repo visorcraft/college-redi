@@ -1,5 +1,5 @@
 // Widget state priority: sleepy > celebrating > thinking > alert > idle.
-export type RediState = 'sleepy' | 'idle' | 'thinking' | 'alert' | 'celebrating';
+export type RediState = 'sleepy' | 'idle' | 'thinking' | 'alert' | 'celebrating' | 'raining';
 export type WidgetState = RediState;
 
 // Spec §6.6 sleepy-gate message - verbatim.
