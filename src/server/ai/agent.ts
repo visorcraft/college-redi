@@ -20,6 +20,52 @@ const REDI_CTX = { actor: 'redi' };
 const CHAT_TURN_LEASE_MS = 10 * 60_000;
 const summaryCache = new Map<string, { count: number; text: string }>();
 
+// ponytail: some models (minimax reasoning, deepseek-r1, qwen-qwq, etc.) wrap internal
+// reasoning in <think>...</think>. Strip it before persisting or displaying - the end user
+// sees only the actual answer. Matches both properly closed blocks AND orphan openers that
+// never got a closing tag (truncated streams).
+const THINK_RE = /<think>[\s\S]*?(?:<\/think>|$)/g;
+export function stripThinking(text: string): string {
+  return text.replace(THINK_RE, '').replace(/<\/think>/g, '').replace(/^\s+|\s+$/g, '');
+}
+
+// Streaming filter: state machine that buffers content inside <think>...</think> and
+// only forwards visible text to the consumer. Handles tags split across chunks.
+function makeThinkFilter(): { feed: (chunk: string) => string } {
+  let inThink = false;
+  let buffer = '';
+  return {
+    feed(chunk: string): string {
+      let out = '';
+      let remaining = chunk;
+      while (remaining.length > 0) {
+        if (inThink) {
+          const close = remaining.indexOf('</think>');
+          if (close === -1) {
+            buffer += remaining;
+            remaining = '';
+          } else {
+            buffer = '';
+            inThink = false;
+            remaining = remaining.slice(close + '</think>'.length);
+          }
+        } else {
+          const open = remaining.indexOf('<think>');
+          if (open === -1) {
+            out += remaining;
+            remaining = '';
+          } else {
+            out += remaining.slice(0, open);
+            inThink = true;
+            remaining = remaining.slice(open + '<think>'.length);
+          }
+        }
+      }
+      return out;
+    },
+  };
+}
+
 const AFFIRMATIVE =
   /^\s*(yes|yep|yeah|y|sure|ok|okay|confirm|confirmed|do it|go ahead|proceed|delete it|remove it|yes please|yes,? do it)[.!]?\s*$/i;
 const PROPOSAL_KIND = 'redi_destructive_proposal';
@@ -362,6 +408,7 @@ async function streamCompletion(
   } as never) as unknown as AsyncIterable<CompletionChunk>;
   let text = '';
   let mode: 'pending' | 'text' | 'tools' = 'pending';
+  const filter = makeThinkFilter();
   const calls = new Map<number, PendingToolCall>();
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta;
@@ -371,7 +418,10 @@ async function streamCompletion(
     if (typeof delta.content === 'string' && delta.content) {
       text += delta.content;
       if (mode === 'pending') mode = 'text';
-      if (mode === 'text') onDelta(delta.content);
+      if (mode === 'text') {
+        const visible = filter.feed(delta.content);
+        if (visible) onDelta(visible);
+      }
     }
     for (const toolCall of toolCalls) {
       if (mode === 'text') continue;
@@ -384,7 +434,7 @@ async function streamCompletion(
     }
   }
   return {
-    text,
+    text: stripThinking(text),
     toolCalls: [...calls.values()].filter((call) => call.name),
     streamedText: mode === 'text',
   };

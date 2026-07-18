@@ -10,6 +10,11 @@ import {
 import { renderMarkdownLite } from './markdownLite';
 import { toolActivityLine } from './rediText';
 
+const THINK_RE = /<think>[\s\S]*?(?:<\/think>|$)/g;
+function stripThinking(text: string): string {
+  return text.replace(THINK_RE, '').replace(/<\/think>/g, '').trim();
+}
+
 export interface ChatBubbleProps {
   open: boolean;
   aiConfigured: boolean;
@@ -106,7 +111,7 @@ export function ChatBubble({
           && message.content.trim().length > 0)
         .map((message) => ({
           role: message.role as UiMessage['role'],
-          content: message.content,
+          content: message.role === 'assistant' ? stripThinking(message.content) : message.content,
         })),
     );
   }, []);
@@ -218,7 +223,8 @@ export function ChatBubble({
           if (!event || !raw) continue;
           const data = JSON.parse(raw);
           if (event === 'delta') {
-            patchLastAssistant((content) => content + data.text);
+            const visible = stripThinking(data.text);
+            if (visible) patchLastAssistant((content) => content + visible);
           } else if (event === 'tool') {
             setActivity(
               data.phase === 'start' ? toolActivityLine(data.name) : null,
@@ -238,7 +244,7 @@ export function ChatBubble({
               `\n\nMCP token, shown once:\n\`${data.result.token}\``;
             patchLastAssistant((content) => content + ephemeralText);
           } else if (event === 'done') {
-            patchLastAssistant(() => data.text + ephemeralText);
+            patchLastAssistant(() => stripThinking(data.text) + ephemeralText);
           } else if (event === 'error') {
             setErrorText(String(data.message));
           }

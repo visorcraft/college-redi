@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { TextField, PrimaryButton } from '@/components/ui/forms';
 import type { SettingsSnapshot } from '@/lib/schemas/settings';
+import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
 
 export function initialNotificationTimezone(
   stored: string | undefined,
@@ -12,8 +13,8 @@ export function initialNotificationTimezone(
   return preferBrowser ? browser || stored || 'UTC' : stored || browser || 'UTC';
 }
 
-export function NotificationsStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue', preferBrowserTimezone = false }: {
-  settings: SettingsSnapshot; onComplete?: (patch?: Record<string, unknown>) => Promise<void>; busy?: boolean; submitLabel?: string; preferBrowserTimezone?: boolean;
+export function NotificationsStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue', preferBrowserTimezone = false, submitRef }: {
+  settings: SettingsSnapshot; onComplete?: (patch?: Record<string, unknown>) => Promise<void>; busy?: boolean; submitLabel?: string; preferBrowserTimezone?: boolean; submitRef?: WizardSubmitRef;
 }) {
   const prefs = settings.notification_prefs;
   const [mode, setMode] = useState<'urgent_digest' | 'immediate_all'>(
@@ -44,6 +45,7 @@ export function NotificationsStep({ settings, onComplete = async () => {}, busy 
       },
     });
   }
+  useWizardSubmit(submitRef, () => { void save(); });
 
   const radio = (value: 'urgent_digest' | 'immediate_all', title: string, body: string) => (
     <label className={`flex cursor-pointer flex-col gap-1 rounded-2xl border p-4 ${mode === value ? 'border-[#1F2D50] bg-[#EAF3FB]' : 'border-[#1F2D50]/20'}`}>
@@ -69,7 +71,7 @@ export function NotificationsStep({ settings, onComplete = async () => {}, busy 
       </div>
       <p className="text-xs text-[#1F2D50]/60">During quiet hours I hold non-urgent messages. Urgent ones (like a registration window opening) still come through.</p>
       <TextField label="Timezone" value={timezone} onChange={setTimezone} hint="Auto-detected from your browser - edit if it looks wrong." />
-      <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>
+      {!submitRef && <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>}
     </div>
   );
 }

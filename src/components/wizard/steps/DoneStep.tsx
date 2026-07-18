@@ -4,10 +4,14 @@ import Link from 'next/link';
 import { PrimaryButton } from '@/components/ui/forms';
 import type { SettingsSnapshot } from '@/lib/schemas/settings';
 import type { SecretFlags } from '../WizardShell';
+import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
 
-export function DoneStep({ settings, secretFlags, onFinish, busy }: {
+export function DoneStep({ settings, secretFlags, onFinish, busy, submitRef }: {
   settings: SettingsSnapshot; secretFlags: SecretFlags; onFinish: () => Promise<void>; busy: boolean;
+  submitRef?: WizardSubmitRef;
 }) {
+  useWizardSubmit(submitRef, () => { void onFinish(); });
+
   const skipped = new Set(settings.wizard_state?.skipped_steps ?? []);
   const rows = [
     { id: 'ai', label: 'AI brain', ok: !skipped.has('ai') && secretFlags.aiKey && Boolean(settings.ai?.model), href: '/settings/ai' },
@@ -34,8 +38,8 @@ export function DoneStep({ settings, secretFlags, onFinish, busy }: {
           </li>
         ))}
       </ul>
-      <p className="text-sm text-[#1F2D50]/70">Anything marked &quot;not set up&quot; gets a gentle reminder banner on your dashboard - never a modal.</p>
-      <PrimaryButton onClick={onFinish} disabled={busy}>Take me to my dashboard</PrimaryButton>
+      <p className="text-sm text-[#1F2D50]/70">Anything marked &quot;not set up&quot; gets a gentle reminder on your dash.</p>
+      {!submitRef && <PrimaryButton onClick={onFinish} disabled={busy}>Take me to my dashboard</PrimaryButton>}
     </div>
   );
 }

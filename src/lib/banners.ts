@@ -36,6 +36,7 @@ export function buildBanners(settings: BannerSettings, status: unknown): Banner[
   };
 
   for (const step of settings.wizard_state?.skipped_steps ?? []) {
+    if (isStepActuallyConfigured(step, settings)) continue;
     const meta = SKIPPED_STEP_BANNERS[step];
     if (meta) push({ id: `skip:${step}`, ...meta });
   }
@@ -82,4 +83,27 @@ export function buildBanners(settings: BannerSettings, status: unknown): Banner[
   }
 
   return out;
+}
+
+// ponytail: a step marked skipped in the wizard is genuinely unconfigured if the matching
+// settings record is missing the host/credential. If the user later wired it up via the
+// settings page, the skipped_steps entry stays but the banner should disappear.
+function isStepActuallyConfigured(step: string, settings: BannerSettings): boolean {
+  switch (step) {
+    case 'ai':
+      return Boolean(settings.ai && (settings.ai as Record<string, unknown>).model);
+    case 'imap':
+      return Boolean(settings.imap && (settings.imap as Record<string, unknown>).host);
+    case 'smtp':
+      return Boolean(settings.smtp && (settings.smtp as Record<string, unknown>).host);
+    case 'twilio':
+      return Boolean(settings.twilio && (settings.twilio as Record<string, unknown>).account_sid);
+    case 'degree':
+      return Boolean((settings as Record<string, unknown>).degree_profile
+        && ((settings as Record<string, unknown>).degree_profile as Record<string, unknown>).program);
+    case 'notifications':
+      return Boolean((settings as Record<string, unknown>).notification_prefs);
+    default:
+      return false;
+  }
 }

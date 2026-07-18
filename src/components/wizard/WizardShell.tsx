@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RediCloud } from '@/components/redi/RediCloud';
 import { apiFetch } from '@/lib/api';
 import { stepByN, advanceWizardState } from '@/lib/wizard';
 import type { SettingsSnapshot, WizardState, PendingChecklistItem } from '@/lib/schemas/settings';
+import type { WizardSubmitRef } from './useWizardSubmit';
 import { WelcomeStep } from './steps/WelcomeStep';
 import { LoginStep } from './steps/LoginStep';
 import { AiStep } from './steps/AiStep';
@@ -31,7 +32,13 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
   const [stepN, setStepN] = useState(() => Math.min(Math.max(wizardState.current_step ?? 1, 1), 10));
   const [busy, setBusy] = useState(false);
   const [raining, setRaining] = useState(false);
+  const submitRef = useRef<(() => void) | null>(null);
   const step = stepByN(stepN);
+
+  const onActionSave = () => {
+    if (busy) return;
+    submitRef.current?.();
+  };
 
   const onCloudClick = () => {
     if (raining) return;
@@ -128,28 +135,58 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
         )}
       </RediCloud>
       <p className="text-center text-lg leading-relaxed text-[#1F2D50]">
-        {step.redi.split(/(?<=\.)\s+/).map((seg, i, arr) => (
-          <span key={i}>{seg}{i < arr.length - 1 && <br />}</span>
+        {step.redi.split(/<br\s*\/?>/i).map((line, li, lines) => (
+          <span key={li}>
+            {line.split(/(?<=\.)\s+/).map((seg, i, arr) => (
+              <span key={i}>{seg}{i < arr.length - 1 && <br />}</span>
+            ))}
+            {li < lines.length - 1 && <br />}
+          </span>
         ))}
       </p>
       <div className="w-full rounded-2xl bg-white p-6 shadow-sm">
-        {step.id === 'welcome' && <WelcomeStep onComplete={onWelcomeComplete} busy={busy} />}
-        {step.id === 'login' && <LoginStep hasPassword={hasPassword} onComplete={onLoginComplete} busy={busy} />}
-        {step.id === 'ai' && <AiStep settings={settings} onComplete={onComplete} busy={busy} />}
-        {step.id === 'imap' && <ImapStep settings={settings} onComplete={onComplete} busy={busy} />}
-        {step.id === 'smtp' && <SmtpStep settings={settings} onComplete={onComplete} busy={busy} />}
-        {step.id === 'twilio' && <TwilioStep settings={settings} onComplete={onComplete} busy={busy} />}
-        {step.id === 'degree' && <DegreeStep settings={settings} onComplete={onComplete} busy={busy} />}
-        {step.id === 'checklist' && <ChecklistStep onSave={onSaveChecklist} busy={busy} />}
-        {step.id === 'notifications' && <NotificationsStep settings={settings} onComplete={onComplete} busy={busy} preferBrowserTimezone />}
-        {step.id === 'done' && <DoneStep settings={settings} secretFlags={secretFlags} onFinish={onFinish} busy={busy} />}
-      </div>
-      <div className="flex w-full items-center justify-between pr-20 text-sm text-[#1F2D50]/70 sm:pr-0">
-        <span>Step {stepN} of 10 - {step.title}</span>
-        <span className="flex items-center gap-4">
-          {onBack && <button type="button" onClick={onBack} disabled={busy} className="underline">Back</button>}
-          {onSkip && <button type="button" onClick={onSkip} disabled={busy} className="underline">Skip for now</button>}
-        </span>
+        <p className="mb-4 text-center text-sm text-[#1F2D50]/70">
+          Step {stepN} of 10 - {step.title}
+        </p>
+        {step.id === 'welcome' && <WelcomeStep onComplete={onWelcomeComplete} busy={busy} submitRef={submitRef} />}
+        {step.id === 'login' && <LoginStep hasPassword={hasPassword} onComplete={onLoginComplete} busy={busy} submitRef={submitRef} />}
+        {step.id === 'ai' && <AiStep settings={settings} onComplete={onComplete} busy={busy} submitRef={submitRef} />}
+        {step.id === 'imap' && <ImapStep settings={settings} onComplete={onComplete} busy={busy} submitRef={submitRef} />}
+        {step.id === 'smtp' && <SmtpStep settings={settings} onComplete={onComplete} busy={busy} submitRef={submitRef} />}
+        {step.id === 'twilio' && <TwilioStep settings={settings} onComplete={onComplete} busy={busy} submitRef={submitRef} />}
+        {step.id === 'degree' && <DegreeStep settings={settings} onComplete={onComplete} busy={busy} submitRef={submitRef} />}
+        {step.id === 'checklist' && <ChecklistStep onSave={onSaveChecklist} busy={busy} submitRef={submitRef} />}
+        {step.id === 'notifications' && <NotificationsStep settings={settings} onComplete={onComplete} busy={busy} preferBrowserTimezone submitRef={submitRef} />}
+        {step.id === 'done' && <DoneStep settings={settings} secretFlags={secretFlags} onFinish={onFinish} busy={busy} submitRef={submitRef} />}
+        <div className="mt-6 flex gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={busy || !onBack}
+            className="rounded-xl border border-[#1F2D50]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#1F2D50] hover:bg-[#EAF3FB] disabled:opacity-40"
+            style={{ flex: '1 1 25%' }}
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={onActionSave}
+            disabled={busy}
+            className="rounded-xl bg-[#1F2D50] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#2E416E] disabled:opacity-50"
+            style={{ flex: '2 1 50%' }}
+          >
+            {busy ? 'One moment…' : 'Save & continue'}
+          </button>
+          <button
+            type="button"
+            onClick={onSkip}
+            disabled={busy || !onSkip}
+            className="rounded-xl border border-[#1F2D50]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#1F2D50] hover:bg-[#EAF3FB] disabled:opacity-40"
+            style={{ flex: '1 1 25%' }}
+          >
+            Skip
+          </button>
+        </div>
       </div>
     </main>
   );

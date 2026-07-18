@@ -5,9 +5,11 @@ import { apiFetch } from '@/lib/api';
 import { TextField, PasswordField, SelectField, PrimaryButton } from '@/components/ui/forms';
 import { TestConnectionButton } from '@/components/ui/TestConnectionButton';
 import type { SettingsSnapshot } from '@/lib/schemas/settings';
+import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
 
-export function AiStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue' }: {
+export function AiStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue', submitRef }: {
   settings: SettingsSnapshot; onComplete?: (patch?: Record<string, unknown>) => Promise<void>; busy?: boolean; submitLabel?: string;
+  submitRef?: WizardSubmitRef;
 }) {
   const ai = settings.ai ?? {};
   const [baseUrl, setBaseUrl] = useState(ai.base_url ?? 'https://api.openai.com/v1');
@@ -25,6 +27,8 @@ export function AiStep({ settings, onComplete = async () => {}, busy = false, su
       setError(err instanceof Error ? err.message : String(err));
     }
   }
+
+  useWizardSubmit(submitRef, () => { void save(); });
 
   return (
     <div className="flex flex-col gap-4">
@@ -51,7 +55,7 @@ export function AiStep({ settings, onComplete = async () => {}, busy = false, su
         }}
       />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>
+      {!submitRef && <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>}
     </div>
   );
 }

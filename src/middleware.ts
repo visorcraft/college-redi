@@ -20,6 +20,7 @@ export default async function middleware(req: NextRequest) {
   forwardedHeaders.set('x-nonce', nonce);
   forwardedHeaders.set('x-redi-secure', String(isSecureRequest(req)));
   forwardedHeaders.set('Content-Security-Policy', contentSecurityPolicy(nonce));
+  forwardedHeaders.set('x-pathname', pathname);
   const next = () => NextResponse.next({
     request: { headers: forwardedHeaders },
   });

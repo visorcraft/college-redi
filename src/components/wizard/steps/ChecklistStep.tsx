@@ -4,12 +4,15 @@ import { useState } from 'react';
 import { PrimaryButton } from '@/components/ui/forms';
 import { STANDARD_CHECKLIST } from '@/lib/schemas/settings';
 import type { PendingChecklistItem } from '@/lib/schemas/settings';
+import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
 
-export function ChecklistStep({ onSave, busy }: {
+export function ChecklistStep({ onSave, busy, submitRef }: {
   onSave: (items: PendingChecklistItem[]) => Promise<void>; busy: boolean;
+  submitRef?: WizardSubmitRef;
 }) {
   const [checked, setChecked] = useState<boolean[]>(STANDARD_CHECKLIST.map(() => true));
-  const [dates, setDates] = useState<string[]>(STANDARD_CHECKLIST.map(() => ''));
+  const today = new Date().toISOString().slice(0, 10);
+  const [dates, setDates] = useState<string[]>(STANDARD_CHECKLIST.map(() => today));
 
   function save() {
     const items: PendingChecklistItem[] = STANDARD_CHECKLIST
@@ -22,6 +25,8 @@ export function ChecklistStep({ onSave, busy }: {
       }));
     return onSave(items);
   }
+
+  useWizardSubmit(submitRef, () => { void save(); });
 
   return (
     <div className="flex flex-col gap-4">
@@ -39,7 +44,7 @@ export function ChecklistStep({ onSave, busy }: {
           </li>
         ))}
       </ul>
-      <PrimaryButton onClick={save} disabled={busy}>Save &amp; continue</PrimaryButton>
+      {!submitRef && <PrimaryButton onClick={save} disabled={busy}>Save &amp; continue</PrimaryButton>}
     </div>
   );
 }

@@ -6,10 +6,11 @@ import { PROVIDERS, providerById } from '@/lib/providers';
 import { TextField, PasswordField, CheckboxField, PrimaryButton } from '@/components/ui/forms';
 import { TestConnectionButton } from '@/components/ui/TestConnectionButton';
 import type { SettingsSnapshot } from '@/lib/schemas/settings';
+import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
 
-export function ImapStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue', variant = 'wizard' }: {
+export function ImapStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue', variant = 'wizard', submitRef }: {
   settings: SettingsSnapshot; onComplete?: (patch?: Record<string, unknown>) => Promise<void>; busy?: boolean;
-  submitLabel?: string; variant?: 'wizard' | 'settings';
+  submitLabel?: string; variant?: 'wizard' | 'settings'; submitRef?: WizardSubmitRef;
 }) {
   const imap = settings.imap ?? {};
   const [providerId, setProviderId] = useState('other');
@@ -43,6 +44,7 @@ export function ImapStep({ settings, onComplete = async () => {}, busy = false, 
       setError(err instanceof Error ? err.message : String(err));
     }
   }
+  useWizardSubmit(submitRef, () => { void save(); });
 
   return (
     <div className="flex flex-col gap-4">
@@ -94,7 +96,7 @@ export function ImapStep({ settings, onComplete = async () => {}, busy = false, 
         }}
       />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>
+      {!submitRef && <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>}
     </div>
   );
 }

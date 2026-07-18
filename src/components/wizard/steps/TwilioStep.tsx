@@ -5,10 +5,11 @@ import { apiFetch } from '@/lib/api';
 import { TextField, PasswordField, CheckboxField, PrimaryButton } from '@/components/ui/forms';
 import { TestConnectionButton } from '@/components/ui/TestConnectionButton';
 import type { SettingsSnapshot } from '@/lib/schemas/settings';
+import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
 
-export function TwilioStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue', variant = 'wizard' }: {
+export function TwilioStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue', variant = 'wizard', submitRef }: {
   settings: SettingsSnapshot; onComplete?: (patch?: Record<string, unknown>) => Promise<void>; busy?: boolean;
-  submitLabel?: string; variant?: 'wizard' | 'settings';
+  submitLabel?: string; variant?: 'wizard' | 'settings'; submitRef?: WizardSubmitRef;
 }) {
   const twilio = settings.twilio ?? {};
   const [accountSid, setAccountSid] = useState(twilio.account_sid ?? '');
@@ -22,17 +23,23 @@ export function TwilioStep({ settings, onComplete = async () => {}, busy = false
     setError(null);
     try {
       if (authToken) await apiFetch('/api/settings/secret', { method: 'PUT', body: { name: 'twilio.auth_token', value: authToken } });
-      await onComplete({ twilio: { ...twilio, account_sid: accountSid, from_number: fromNumber, to_number: toNumber, enabled } });
+      const empty = !accountSid && !fromNumber && !toNumber;
+      const twilioPatch: Record<string, unknown> = empty
+        ? { enabled: false }
+        : { ...twilio, account_sid: accountSid, from_number: fromNumber, to_number: toNumber, enabled };
+      await onComplete({ twilio: twilioPatch });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   }
+  useWizardSubmit(submitRef, () => { void save(); });
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold text-[#1F2D50]">Text messages (Twilio)</h1>
       <p className="text-sm text-[#1F2D50]/70">
-        Optional - skip this if email is enough. On a Twilio trial account, texts only go to verified numbers.
+        Optional - skip this if email is enough.<br />
+        On a Twilio trial account, texts only go to verified numbers.
       </p>
       <TextField label="Account SID" value={accountSid} onChange={setAccountSid} placeholder="AC…" />
       <PasswordField label="Auth token" value={authToken} onChange={setAuthToken}
@@ -52,7 +59,7 @@ export function TwilioStep({ settings, onComplete = async () => {}, busy = false
         }}
       />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>
+      {!submitRef && <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>}
     </div>
   );
 }

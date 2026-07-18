@@ -1,23 +1,39 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { PasswordField, PrimaryButton } from '@/components/ui/forms';
+import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
 
-export function LoginStep({ hasPassword, onComplete, busy }: {
-  hasPassword: boolean; onComplete: () => Promise<void>; busy: boolean;
+export function LoginStep({ hasPassword, onComplete, busy, submitRef }: {
+  hasPassword: boolean; onComplete: () => Promise<void>; busy: boolean; submitRef?: WizardSubmitRef;
 }) {
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
   const [setupToken, setSetupToken] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (hasPassword) return;
+    let cancelled = false;
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((me: { setupToken?: string }) => {
+        if (!cancelled && me.setupToken) setSetupToken(me.setupToken);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [hasPassword]);
+
+  const continueFn = () => { void onComplete(); };
+  useWizardSubmit(submitRef, hasPassword ? continueFn : () => { void save(); });
+
   if (hasPassword) {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-xl font-semibold text-[#1F2D50]">Your login</h1>
         <p className="text-sm text-[#1F2D50]">Your password is already set - you&apos;re good.</p>
-        <PrimaryButton onClick={() => onComplete()} disabled={busy}>Continue</PrimaryButton>
+        {!submitRef && <PrimaryButton onClick={() => onComplete()} disabled={busy}>Continue</PrimaryButton>}
       </div>
     );
   }
@@ -40,11 +56,11 @@ export function LoginStep({ hasPassword, onComplete, busy }: {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold text-[#1F2D50]">Your login</h1>
-      <PasswordField label="Password" value={pw1} onChange={setPw1} hint="At least 8 characters. Stored as an Argon2id hash, never in plain text." />
+      <PasswordField label="Password" value={pw1} onChange={setPw1} hint="At least 8 characters." />
       <PasswordField label="Confirm password" value={pw2} onChange={setPw2} />
-      <PasswordField label="Setup token" value={setupToken} onChange={setSetupToken} hint="Find REDI_SETUP_TOKEN in DATA_DIR/.env." />
+      <input type="hidden" name="setup-token" value={setupToken} readOnly />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <PrimaryButton onClick={save} disabled={busy}>Create password</PrimaryButton>
+      {!submitRef && <PrimaryButton onClick={save} disabled={busy}>Create password</PrimaryButton>}
     </div>
   );
 }

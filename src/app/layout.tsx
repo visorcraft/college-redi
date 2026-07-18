@@ -15,7 +15,8 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  await headers();
+  const hdrs = await headers();
+  const pathname = hdrs.get('x-pathname') ?? '';
   let aiConfigured = false;
   let authenticated = false;
   try {
@@ -32,7 +33,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <CsrfInit />
         {authenticated && <AppNav />}
         {authenticated ? <div className="pb-24">{children}</div> : children}
-        <RediWidget aiConfigured={aiConfigured} pollStatus={authenticated} />
+        {pathname !== '/wizard' && (
+          <RediWidget aiConfigured={aiConfigured} pollStatus={authenticated} />
+        )}
       </body>
     </html>
   );

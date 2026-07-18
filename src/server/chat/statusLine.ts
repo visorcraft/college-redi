@@ -1,4 +1,5 @@
 import { callTool } from '../tools/call';
+import { materializePendingChecklist } from '../tools/tasks';
 
 const CONTEXT = { actor: 'system' };
 
@@ -40,6 +41,9 @@ export async function buildDashboardLine(): Promise<{
   }
 
   try {
+    // ponytail: materialize first so the count reflects today's tasks, not just whatever
+    // happened to have been created by a prior parallel /api/tasks fetch.
+    await materializePendingChecklist();
     const result = await callTool(
       'list_tasks',
       { status: 'pending' },

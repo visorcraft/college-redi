@@ -6,10 +6,11 @@ import { PROVIDERS, providerById } from '@/lib/providers';
 import { TextField, PasswordField, SelectField, CheckboxField, PrimaryButton } from '@/components/ui/forms';
 import { TestConnectionButton } from '@/components/ui/TestConnectionButton';
 import type { SettingsSnapshot } from '@/lib/schemas/settings';
+import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
 
-export function SmtpStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue', variant = 'wizard' }: {
+export function SmtpStep({ settings, onComplete = async () => {}, busy = false, submitLabel = 'Save & continue', variant = 'wizard', submitRef }: {
   settings: SettingsSnapshot; onComplete?: (patch?: Record<string, unknown>) => Promise<void>; busy?: boolean;
-  submitLabel?: string; variant?: 'wizard' | 'settings';
+  submitLabel?: string; variant?: 'wizard' | 'settings'; submitRef?: WizardSubmitRef;
 }) {
   const smtp = settings.smtp ?? {};
   const [providerId, setProviderId] = useState('other');
@@ -48,10 +49,11 @@ export function SmtpStep({ settings, onComplete = async () => {}, busy = false, 
       setError(err instanceof Error ? err.message : String(err));
     }
   }
+  useWizardSubmit(submitRef, () => { void save(); });
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold text-[#1F2D50]">Personal email (SMTP)</h1>
+      <h1 className="text-xl font-semibold text-[#1F2D50]">Outbound email (SMTP)</h1>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Provider quick-picks">
         {PROVIDERS.map((p) => (
           <button key={p.id} type="button" onClick={() => pickProvider(p.id)}
@@ -93,7 +95,7 @@ export function SmtpStep({ settings, onComplete = async () => {}, busy = false, 
       />
       <p className="text-xs text-[#1F2D50]/60">The test sends a real &quot;hello from Redi ☁️&quot; message to your personal address.</p>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>
+      {!submitRef && <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>}
     </div>
   );
 }

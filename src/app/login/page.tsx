@@ -18,8 +18,14 @@ export default function LoginPage() {
     let cancelled = false;
     fetch('/api/auth/me')
       .then((r) => r.json())
-      .then((me: { passwordSet: boolean }) => {
-        if (!cancelled) setMode(me.passwordSet ? 'login' : 'setup');
+      .then((me: { passwordSet: boolean; setupToken?: string }) => {
+        if (cancelled) return;
+        if (me.passwordSet) {
+          setMode('login');
+        } else {
+          setMode('setup');
+          if (me.setupToken) setSetupToken(me.setupToken);
+        }
       })
       .catch(() => {
         if (!cancelled) setError('Could not reach the server. Is Redi running?');
@@ -91,24 +97,7 @@ export default function LoginPage() {
               />
             </div>
             {isSetup && (
-              <div>
-                <label htmlFor="setup-token" className="mb-1 block text-sm font-medium">
-                  Setup token
-                </label>
-                <input
-                  id="setup-token"
-                  name="setup-token"
-                  type="password"
-                  required
-                  autoComplete="off"
-                  value={setupToken}
-                  onChange={(e) => setSetupToken(e.target.value)}
-                  className="w-full rounded-xl border border-[#1F2D50]/20 px-3 py-2 outline-none focus:border-[#1F2D50] focus:ring-2 focus:ring-[#1F2D50]/20"
-                />
-                <p className="mt-1 text-xs text-[#1F2D50]/60">
-                  Find REDI_SETUP_TOKEN in DATA_DIR/.env.
-                </p>
-              </div>
+              <input type="hidden" name="setup-token" value={setupToken} />
             )}
             {isSetup && (
               <div>

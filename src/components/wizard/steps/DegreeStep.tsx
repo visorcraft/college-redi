@@ -5,9 +5,11 @@ import { TextField, PrimaryButton } from '@/components/ui/forms';
 import { DegreeImportSlot } from '../DegreeImportSlot';
 import type { DegreeImportDraft } from '@/lib/schemas/degree';
 import type { SettingsSnapshot } from '@/lib/schemas/settings';
+import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
 
-export function DegreeStep({ settings, onComplete, busy }: {
+export function DegreeStep({ settings, onComplete, busy, submitRef }: {
   settings: SettingsSnapshot; onComplete: (patch?: Record<string, unknown>) => Promise<void>; busy: boolean;
+  submitRef?: WizardSubmitRef;
 }) {
   const dp = settings.degree_profile ?? { institution: '', program: '', catalog_year: '' };
   const [institution, setInstitution] = useState(dp.institution);
@@ -26,21 +28,25 @@ export function DegreeStep({ settings, onComplete, busy }: {
     await onComplete({ degree_profile: profile });
   }
 
+  useWizardSubmit(submitRef, () => { void onComplete({ degree_profile: { institution, program, catalog_year: catalogYear } }); });
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold text-[#1F2D50]">Your degree</h1>
       <TextField label="Institution" value={institution} onChange={setInstitution} placeholder="State University" />
       <TextField label="Program" value={program} onChange={setProgram} placeholder="B.S. Computer Science" />
-      <TextField label="Catalog year" value={catalogYear} onChange={setCatalogYear} placeholder="2025" />
+      <TextField label="Catalog year" value={catalogYear} onChange={setCatalogYear} placeholder="2026" />
       <DegreeImportSlot onConfirmed={imported} />
       <p className="text-sm text-[#1F2D50]/70">
         Prefer to do it yourself? You can add requirements and courses by hand later on the My Degree page.
       </p>
-      <PrimaryButton
-        onClick={() => onComplete({ degree_profile: { institution, program, catalog_year: catalogYear } })}
-        disabled={busy}>
-        Save &amp; continue
-      </PrimaryButton>
+      {!submitRef && (
+        <PrimaryButton
+          onClick={() => onComplete({ degree_profile: { institution, program, catalog_year: catalogYear } })}
+          disabled={busy}>
+          Save &amp; continue
+        </PrimaryButton>
+      )}
     </div>
   );
 }

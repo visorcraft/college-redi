@@ -160,6 +160,16 @@ async function deleteTask(params: unknown) {
 }
 
 export async function materializePendingChecklist(): Promise<{ created: number }> {
+  // ponytail: parallel GET /api/tasks from the dashboard fans out two materialize calls;
+  // serialize so the duplicate-by-title guard isn't bypassed by a concurrent read.
+  const pending = materializeTail.then(async () => doMaterializePendingChecklist());
+  materializeTail = pending.then(() => undefined, () => undefined);
+  return pending;
+}
+
+let materializeTail: Promise<void> = Promise.resolve();
+
+async function doMaterializePendingChecklist(): Promise<{ created: number }> {
   const settings = await getSettings();
   const entries = settings.wizard_state.pending_checklist;
   if (!entries?.length) return { created: 0 };

@@ -1,8 +1,11 @@
 'use client';
 
 import { PrimaryButton } from '@/components/ui/forms';
+import { useWizardSubmit, type WizardSubmitRef } from '../useWizardSubmit';
 
-export function WelcomeStep({ onComplete, busy }: { onComplete: () => Promise<void>; busy: boolean }) {
+export function WelcomeStep({ onComplete, busy, submitRef }: { onComplete: () => Promise<void>; busy: boolean; submitRef?: WizardSubmitRef }) {
+  const submit = () => { void onComplete(); };
+  useWizardSubmit(submitRef, submit);
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold text-[#1F2D50]">Welcome aboard</h1>
@@ -13,7 +16,7 @@ export function WelcomeStep({ onComplete, busy }: { onComplete: () => Promise<vo
         <li>📬 <strong>Email watching</strong> - I read your college inbox and summarize what matters.</li>
       </ul>
       <p className="text-sm text-[#1F2D50]/70">This takes a few minutes, and you can skip anything and come back later.</p>
-      <PrimaryButton onClick={() => onComplete()} disabled={busy}>Let&apos;s go</PrimaryButton>
+      {!submitRef && <PrimaryButton onClick={() => onComplete()} disabled={busy}>Let&apos;s go</PrimaryButton>}
     </div>
   );
 }
