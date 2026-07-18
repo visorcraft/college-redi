@@ -64,7 +64,7 @@ docker compose -f docker-compose.daemon.yml up -d
 
 ## Built with Codex & GPT-5.6
 
-I built Redi with Codex and GPT-5.6 as a hands-on coding partner, using Next.js, React, TypeScript, and encrypted MongrelDB storage. The hardest parts were turning messy degree audits, course plans, emails, and administrative requirements into consistent information, then getting multi-turn chat and tool calls to behave the way a student would expect. After plenty of debugging, it came together as a private, self-hosted app that keeps the useful parts in one place without treating student data as an afterthought.
+I built Redi with the Codex CLI harness as my day-to-day development workspace: I used it to explore the codebase, implement features, run the app and its tests, trace failures, and exercise real setup and chat flows in a browser. `gpt-5.6-sol` on `high` effort was my go-to model, especially for working through the messier parts like normalizing degree audits and college emails, designing the security model, and debugging multi-turn chat with tool calls. I still drove the product decisions and tested the results, but that tight edit-run-review loop made it practical to turn Redi into a private, self-hosted app instead of leaving it as an idea.
 
 ## Gallery
 
