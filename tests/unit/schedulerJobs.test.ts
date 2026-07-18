@@ -206,6 +206,20 @@ describe('scheduler registration (Appendix C) and job_leases (spec §3.4)', () =
     delete process.env.SCHEDULER_ENABLED;
   });
 
+  it('logs rejected scheduled work instead of leaking an unhandled rejection', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    scheduler.runScheduled('broken_job', async () => {
+      throw new Error('database unavailable');
+    });
+    await vi.waitFor(() => expect(error).toHaveBeenCalledWith(expect.stringContaining(
+      '"job":"broken_job"',
+    )));
+    expect(error).toHaveBeenCalledWith(expect.stringContaining(
+      '"error":"database unavailable"',
+    ));
+    error.mockRestore();
+  });
+
   it('reads digest time and timezone on every tick', async () => {
     expect(await scheduler.runDailyDigestIfDue(
       new Date('2026-08-20T07:30:00.000Z'),

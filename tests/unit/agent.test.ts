@@ -175,6 +175,31 @@ describe('Redi agent loop', () => {
     expect(request.messages[0].role).toBe('system');
   });
 
+  it('emits plain-answer deltas before the upstream stream finishes', async () => {
+    const context = await boot([{
+      content: 'First light',
+      finishDelayMs: 100,
+    }]);
+    const conversation = await context.store.createConversation();
+    let resolveDelta!: () => void;
+    const delta = new Promise<void>((resolve) => {
+      resolveDelta = resolve;
+    });
+    let finished = false;
+    const turn = context.agent.runAgentTurn(
+      conversation.id,
+      'hello slowly',
+      (event) => {
+        if (event.type === 'delta') resolveDelta();
+      },
+    ).finally(() => {
+      finished = true;
+    });
+    await delta;
+    expect(finished).toBe(false);
+    await turn;
+  });
+
   it('runs a tool round and feeds the result back', async () => {
     const context = await boot([
       { toolCalls: [{ name: 'get_system_status', arguments: '{}' }] },

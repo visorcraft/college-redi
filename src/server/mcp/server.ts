@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import packageJson from '../../../package.json';
 import { callTool } from '../tools/call';
 import { getAllTools } from '../tools/registry';
 
@@ -76,7 +77,7 @@ const RESOURCES: McpResourceDef[] = [
 
 export function buildMcpServer(actor: string): Server {
   const server = new Server(
-    { name: 'redi', version: '0.1.3' },
+    { name: 'redi', version: packageJson.version },
     { capabilities: { tools: {}, resources: {} } },
   );
 

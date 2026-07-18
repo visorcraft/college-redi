@@ -5,6 +5,7 @@ import { cleanTables, setupTestDb, teardownTestDb } from '../helpers/p4';
 const CTX = { actor: 'test' };
 let callTool: (name: string, params: unknown, context: { actor: string }) => Promise<unknown>;
 let enqueue: typeof import('../../src/server/notify/engine').enqueueNotification;
+let dispatch: typeof import('../../src/server/notify/engine').dispatchDueNotifications;
 let updateSettings: (patch: Record<string, unknown>) => Promise<unknown>;
 let sqlExec: (sql: string) => Promise<void>;
 
@@ -16,7 +17,10 @@ interface ListResult {
 beforeAll(async () => {
   await setupTestDb();
   ({ callTool } = await import('../../src/server/tools/call'));
-  ({ enqueueNotification: enqueue } = await import('../../src/server/notify/engine'));
+  ({
+    enqueueNotification: enqueue,
+    dispatchDueNotifications: dispatch,
+  } = await import('../../src/server/notify/engine'));
   ({ updateSettings } = await import('../../src/server/settings'));
   ({ sqlExec } = await import('../../src/server/db/sql'));
   await updateSettings({
@@ -28,13 +32,21 @@ beforeAll(async () => {
 beforeEach(cleanTables);
 afterAll(teardownTestDb);
 
-const seed = (title: string) => enqueue({
-  type: 'system',
-  title,
-  body: 'b',
-  importance: 'normal',
-  scheduledFor: new Date(Date.now() - 60_000),
-});
+const seed = async (title: string) => {
+  const id = await enqueue({
+    type: 'system',
+    title,
+    body: 'b',
+    importance: 'normal',
+    scheduledFor: new Date(Date.now() - 60_000),
+  });
+  await sqlExec(
+    `UPDATE notifications SET status = 'sent', ` +
+    `sent_at = '2026-07-17T12:00:00.000Z' ` +
+    `WHERE id = '${id}'`,
+  );
+  return id;
+};
 
 describe('notification tools', () => {
   it('lists newest first with unread count and filtering', async () => {
@@ -85,15 +97,54 @@ describe('notification tools', () => {
     expect(rows[0]?.provider_response.messageId).toBe('m1');
   });
 
-  it('schedules an ad-hoc reminder', async () => {
+  it('hides future and cancelled reminders until in-app delivery', async () => {
     const result = await callTool('schedule_notification', {
       title: 'Email my advisor',
       body: 'Ask about CS 201',
-      scheduled_for: '2026-03-13T15:00:00.000Z',
+      scheduled_for: '2099-03-13T15:00:00.000Z',
     }, CTX) as { id: string };
     expect(result.id).toBeTruthy();
-    const list = await callTool('list_notifications', {}, CTX) as ListResult;
-    expect(list.notifications[0]?.title).toBe('Email my advisor');
+    expect((await callTool('list_notifications', {}, CTX) as ListResult)
+      .notifications).toHaveLength(0);
+    await sqlExec(
+      `UPDATE notifications SET scheduled_for = '2000-03-13T15:00:00.000Z' ` +
+      `WHERE id = '${result.id}'`,
+    );
+    await dispatch(new Date('2026-07-17T12:00:00.000Z'));
+    expect((await callTool('list_notifications', {}, CTX) as ListResult)
+      .notifications[0]?.title).toBe('Email my advisor');
+
+    const cancelled = await callTool('schedule_notification', {
+      title: 'Cancelled reminder',
+      body: 'Never show this.',
+      scheduled_for: '2099-03-13T15:00:00.000Z',
+    }, CTX) as { id: string };
+    await sqlExec(
+      `UPDATE notifications SET status = 'cancelled' ` +
+      `WHERE id = '${cancelled.id}'`,
+    );
+    expect((await callTool('list_notifications', {}, CTX) as ListResult)
+      .notifications.map(({ title }) => title))
+      .not.toContain('Cancelled reminder');
+
+    const retrying = await enqueue({
+      type: 'system',
+      title: 'Delivered in app, email retrying',
+      body: 'Show after the in-app channel succeeds.',
+      importance: 'normal',
+      channels: ['in_app'],
+      scheduledFor: new Date('2099-03-13T15:00:00.000Z'),
+    });
+    await sqlExec(
+      `INSERT INTO notification_history (` +
+      `id, notification_id, channel, destination, status, provider_response, attempt, sent_at` +
+      `) VALUES (` +
+      `'h-retrying', '${retrying}', 'in_app', 'in_app', 'sent', ` +
+      `'{"delivered":"in_app"}', 1, '2026-07-17T12:00:00.000Z')`,
+    );
+    expect((await callTool('list_notifications', {}, CTX) as ListResult)
+      .notifications.map(({ title }) => title))
+      .toContain('Delivered in app, email retrying');
   });
 
   it('rejects an explicitly requested unconfigured external channel', async () => {

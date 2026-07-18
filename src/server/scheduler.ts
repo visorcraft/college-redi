@@ -19,24 +19,36 @@ export async function startScheduler(): Promise<void> {
   alive = true;
   tasks.push(
     cron.schedule('* * * * *', () => {
-      void withLease('notification_dispatch', 55_000, (signal) =>
-        runNotificationDispatchJob(new Date(), signal));
+      runScheduled('notification_dispatch', () =>
+        withLease('notification_dispatch', 55_000, (signal) =>
+          runNotificationDispatchJob(new Date(), signal)));
     }),
     cron.schedule('7 * * * *', () => {
-      void withLease('registration_sweep', 10 * 60_000, (signal) =>
-        runRegistrationSweepJob(new Date(), signal));
+      runScheduled('registration_sweep', () =>
+        withLease('registration_sweep', 10 * 60_000, (signal) =>
+          runRegistrationSweepJob(new Date(), signal)));
     }),
     cron.schedule('* * * * *', () => {
-      void runDailyDigestIfDue();
+      runScheduled('daily_digest', () => runDailyDigestIfDue());
     }),
     cron.schedule('17 * * * *', () => {
-      void sweepExpiredLeases().catch((error) => console.error(JSON.stringify({
-        level: 'error',
-        msg: 'stale-lease sweep failed',
-        error: error instanceof Error ? error.message : String(error),
-      })));
+      runScheduled('stale_lease_sweep', () => sweepExpiredLeases());
     }),
   );
+}
+
+export function runScheduled(
+  job: string,
+  work: () => Promise<unknown>,
+): void {
+  void Promise.resolve()
+    .then(work)
+    .catch((error) => console.error(JSON.stringify({
+      level: 'error',
+      msg: 'scheduled job failed before completion',
+      job,
+      error: error instanceof Error ? error.message : String(error),
+    })));
 }
 
 export function stopScheduler(): void {

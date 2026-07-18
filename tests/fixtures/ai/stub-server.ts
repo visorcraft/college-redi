@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 export interface StubReply {
   content?: string;
   toolCalls?: Array<{ name: string; arguments: string }>;
+  finishDelayMs?: number;
 }
 
 export interface StubServer {
@@ -24,7 +25,7 @@ export async function startStubAiServer(replies: StubReply[]): Promise<StubServe
     request.on('data', (chunk) => {
       body += String(chunk);
     });
-    request.on('end', () => {
+    request.on('end', async () => {
       const parsed = JSON.parse(body) as Record<string, unknown>;
       requests.push(parsed);
       const reply = queue.shift();
@@ -72,6 +73,9 @@ export async function startStubAiServer(replies: StubReply[]): Promise<StubServe
           }
         } else {
           send(chunk({ role: 'assistant', content: reply.content ?? '' }));
+        }
+        if (reply.finishDelayMs) {
+          await new Promise((resolve) => setTimeout(resolve, reply.finishDelayMs));
         }
         send(chunk({}, finishReason));
         response.write('data: [DONE]\n\n');

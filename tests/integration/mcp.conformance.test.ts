@@ -6,6 +6,7 @@ import {
 } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import packageJson from '../../package.json';
 import { setupTestEnv, teardownTestEnv } from '../helpers/testEnv';
 
 let dataDir = '';
@@ -131,7 +132,10 @@ describe('MCP conformance', () => {
 
   it('lists the full canonical registry with identical schemas', async () => {
     const client = await connectClient(rawToken);
-    expect(client.getServerVersion()).toEqual({ name: 'redi', version: '0.1.3' });
+    expect(client.getServerVersion()).toEqual({
+      name: 'redi',
+      version: packageJson.version,
+    });
     const { tools } = await client.listTools();
     const { getAllTools } = await import('../../src/server/tools/registry');
     const registry = getAllTools();

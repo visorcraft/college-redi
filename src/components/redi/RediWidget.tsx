@@ -38,6 +38,7 @@ export function RediWidget({
   const [chatBusy, setChatBusy] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const celebrationTimer = useRef<number | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   const refresh = useCallback(async () => {
     if (!pollStatus) return;
@@ -90,10 +91,12 @@ export function RediWidget({
   return (
     <>
       <button
+        ref={buttonRef}
         type="button"
         data-testid="redi-widget"
         aria-label={statusLine}
         aria-expanded={open}
+        aria-controls="redi-chat"
         title={statusLine}
         onClick={() => setOpen((value) => !value)}
         className="fixed bottom-6 right-6 z-50 rounded-full p-1 transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#FFC24B] motion-reduce:transition-none"
@@ -117,6 +120,7 @@ export function RediWidget({
         aiConfigured={status.aiConfigured}
         onClose={() => setOpen(false)}
         onBusyChange={setChatBusy}
+        returnFocusRef={buttonRef}
       />
     </>
   );

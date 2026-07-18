@@ -18,6 +18,15 @@ describe('authenticated app shell and dashboard', () => {
       .toContain("pathname === '/login'");
   });
 
+  it('treats chat as modeless and restores focus to its launcher', () => {
+    const chat = readFileSync('src/components/redi/ChatBubble.tsx', 'utf8');
+    const widget = readFileSync('src/components/redi/RediWidget.tsx', 'utf8');
+    expect(chat).not.toContain('aria-modal=');
+    expect(chat).toContain('sleepyActionRef.current');
+    expect(chat).toContain('returnFocusRef.current?.focus()');
+    expect(widget).toContain('returnFocusRef={buttonRef}');
+  });
+
   it('keeps dashboard cards in required order and removes milestone placeholder copy', () => {
     const source = readFileSync('src/app/page.tsx', 'utf8');
     const today = source.indexOf('<TodayCard />');

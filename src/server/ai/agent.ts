@@ -351,21 +351,30 @@ async function streamCompletion(
   client: CompletionClient,
   body: Record<string, unknown>,
   onDelta: (text: string) => void,
-): Promise<{ text: string; toolCalls: PendingToolCall[] }> {
+): Promise<{
+  text: string;
+  toolCalls: PendingToolCall[];
+  streamedText: boolean;
+}> {
   const stream = await client.chat.completions.create({
     ...body,
     stream: true,
   } as never) as unknown as AsyncIterable<CompletionChunk>;
   let text = '';
+  let mode: 'pending' | 'text' | 'tools' = 'pending';
   const calls = new Map<number, PendingToolCall>();
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta;
     if (!delta) continue;
+    const toolCalls = delta.tool_calls ?? [];
+    if (toolCalls.length > 0 && mode === 'pending') mode = 'tools';
     if (typeof delta.content === 'string' && delta.content) {
       text += delta.content;
-      onDelta(delta.content);
+      if (mode === 'pending') mode = 'text';
+      if (mode === 'text') onDelta(delta.content);
     }
-    for (const toolCall of delta.tool_calls ?? []) {
+    for (const toolCall of toolCalls) {
+      if (mode === 'text') continue;
       const index = typeof toolCall.index === 'number' ? toolCall.index : 0;
       const current = calls.get(index) ?? { id: '', name: '', args: '' };
       if (toolCall.id) current.id = toolCall.id;
@@ -377,6 +386,7 @@ async function streamCompletion(
   return {
     text,
     toolCalls: [...calls.values()].filter((call) => call.name),
+    streamedText: mode === 'text',
   };
 }
 
@@ -548,11 +558,10 @@ async function runClaimedAgentTurn(
     };
     const tools = projectTools();
     if (tools.length) body.tools = tools;
-    const deltas: string[] = [];
     const completion = await streamCompletion(
       client,
       body,
-      (text) => deltas.push(text),
+      (text) => onEvent({ type: 'delta', text }),
     );
     assertLease();
     if (
@@ -594,7 +603,9 @@ async function runClaimedAgentTurn(
         break;
       }
     }
-    for (const text of deltas) onEvent({ type: 'delta', text });
+    if (!completion.streamedText && completion.text) {
+      onEvent({ type: 'delta', text: completion.text });
+    }
     if (completion.toolCalls.length === 0) {
       finalText = completion.text.trimEnd();
       await store.appendMessage({
@@ -662,6 +673,9 @@ async function runClaimedAgentTurn(
         { model, messages, reasoning_effort: effort },
         (text) => onEvent({ type: 'delta', text }),
       );
+      if (!forced.streamedText && forced.text) {
+        onEvent({ type: 'delta', text: forced.text });
+      }
       finalText = forced.text.trimEnd();
       await store.appendMessage({
         conversation_id: conversationId,

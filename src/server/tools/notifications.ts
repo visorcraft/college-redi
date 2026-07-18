@@ -17,6 +17,10 @@ import { NotFoundError, ToolError } from './errors';
 import { defineTool, type Tool } from './registry';
 
 const IN_APP = `channels LIKE '%"in_app"%'`;
+const DELIVERED_IN_APP = `${IN_APP} AND (` +
+  `status = 'sent' OR id IN (` +
+  `SELECT notification_id FROM notification_history ` +
+  `WHERE channel = 'in_app' AND status = 'sent'))`;
 
 interface NotificationRow {
   id: string;
@@ -43,12 +47,13 @@ const toDto = (row: NotificationRow) => ({
 async function listNotifications(raw: unknown) {
   const params = listNotificationsParamsSchema.parse(raw);
   const rows = await sqlRows<NotificationRow>(
-    `SELECT * FROM notifications WHERE ${IN_APP}` +
+    `SELECT * FROM notifications WHERE ${DELIVERED_IN_APP}` +
     `${params.unread_only ? ' AND read_at IS NULL' : ''} ` +
     `ORDER BY created_at DESC LIMIT ${params.limit}`,
   );
   const unread = await sqlRows<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM notifications WHERE ${IN_APP} AND read_at IS NULL`,
+    `SELECT COUNT(*) AS n FROM notifications WHERE ${DELIVERED_IN_APP} ` +
+    `AND read_at IS NULL`,
   );
   return {
     notifications: rows.map(toDto),
@@ -59,7 +64,8 @@ async function listNotifications(raw: unknown) {
 async function markRead(raw: unknown) {
   const params = markNotificationReadParamsSchema.parse(raw);
   const exists = await sqlRows<{ id: string }>(
-    `SELECT id FROM notifications WHERE id = ${lit(params.id)} AND ${IN_APP}`,
+    `SELECT id FROM notifications WHERE id = ${lit(params.id)} ` +
+    `AND ${DELIVERED_IN_APP}`,
   );
   if (!exists[0]) throw new NotFoundError(`notification not found: ${params.id}`);
   await sqlExec(
@@ -70,14 +76,18 @@ async function markRead(raw: unknown) {
 }
 
 async function markAllRead() {
-  const unread = await sqlRows<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM notifications WHERE ${IN_APP} AND read_at IS NULL`,
+  const unread = await sqlRows<{ id: string }>(
+    `SELECT id FROM notifications WHERE ${DELIVERED_IN_APP} ` +
+    `AND read_at IS NULL`,
   );
-  await sqlExec(
-    `UPDATE notifications SET read_at = ${lit(new Date())} ` +
-    `WHERE ${IN_APP} AND read_at IS NULL`,
-  );
-  return { marked: Number(unread[0]?.n ?? 0) };
+  if (unread.length > 0) {
+    await sqlExec(
+      `UPDATE notifications SET read_at = ${lit(new Date())} ` +
+      `WHERE id IN (${unread.map(({ id }) => lit(id)).join(', ')}) ` +
+      `AND read_at IS NULL`,
+    );
+  }
+  return { marked: unread.length };
 }
 
 function maskDestination(destination: string): string {

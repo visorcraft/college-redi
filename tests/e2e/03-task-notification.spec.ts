@@ -40,6 +40,11 @@ test('task creation and cron tick produce an in-app reminder', async ({ page }) 
 
   const csrf = (await page.context().cookies())
     .find((cookie) => cookie.name === 'redi_csrf')?.value ?? '';
+  const settings = await page.context().request.patch('/api/settings', {
+    data: { quiet_hours: { start: '00:00', end: '00:00' } },
+    headers: { 'x-csrf-token': csrf },
+  });
+  expect(settings.ok()).toBeTruthy();
   const created = await page.context().request.post('/api/tasks', {
     data: {
       title: 'Advising appointment',

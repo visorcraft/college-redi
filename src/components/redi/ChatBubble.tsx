@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type RefObject,
   useCallback,
   useEffect,
   useRef,
@@ -14,6 +15,7 @@ export interface ChatBubbleProps {
   aiConfigured: boolean;
   onClose: () => void;
   onBusyChange: (busy: boolean) => void;
+  returnFocusRef: RefObject<HTMLElement | null>;
 }
 
 interface UiMessage {
@@ -63,6 +65,7 @@ export function ChatBubble({
   aiConfigured,
   onClose,
   onBusyChange,
+  returnFocusRef,
 }: ChatBubbleProps) {
   const [view, setView] = useState<'chat' | 'list'>('chat');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -74,6 +77,8 @@ export function ChatBubble({
   const [errorText, setErrorText] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const sleepyActionRef = useRef<HTMLAnchorElement>(null);
+  const wasOpen = useRef(false);
 
   const setBusy = useCallback((next: boolean) => {
     setBusyState(next);
@@ -118,8 +123,15 @@ export function ChatBubble({
   }, [open, aiConfigured, loadConversations, loadMessages]);
 
   useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open, activeId, busy]);
+    if (open) {
+      (aiConfigured ? inputRef.current : sleepyActionRef.current)?.focus();
+    }
+  }, [open, aiConfigured, activeId, busy]);
+
+  useEffect(() => {
+    if (!open && wasOpen.current) returnFocusRef.current?.focus();
+    wasOpen.current = open;
+  }, [open, returnFocusRef]);
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
@@ -248,8 +260,8 @@ export function ChatBubble({
   if (!aiConfigured) {
     return (
       <div
+        id="redi-chat"
         role="dialog"
-        aria-modal="true"
         aria-label="Chat with Redi"
         className="fixed bottom-24 right-6 z-50 flex w-80 flex-col gap-3 rounded-[2rem] rounded-br-md border border-slate-200 bg-white p-5 shadow-xl"
       >
@@ -257,6 +269,7 @@ export function ChatBubble({
           Redi can talk to you once you add your AI credentials and pick a model
         </p>
         <a
+          ref={sleepyActionRef}
           href="/settings"
           className="rounded-full bg-[#1F2D50] px-4 py-2 text-center text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-[#FFC24B]"
         >
@@ -275,8 +288,8 @@ export function ChatBubble({
 
   return (
     <div
+      id="redi-chat"
       role="dialog"
-      aria-modal="true"
       aria-label="Chat with Redi"
       className="fixed bottom-24 right-6 z-50 flex h-[32rem] w-96 max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-[2rem] rounded-br-md border border-slate-200 bg-white shadow-xl"
     >
