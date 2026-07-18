@@ -35,5 +35,6 @@ tests/e2e/.runtime-data/
 # ── OS / editor cruft
 .DS_Store
 Thumbs.db
+*.kate-swp
 .idea/
 .vscode/

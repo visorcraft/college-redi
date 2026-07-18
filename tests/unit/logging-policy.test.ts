@@ -41,7 +41,7 @@ describe('§16 logging rules: runtime', () => {
 
   it('keeps secret values out of stdout and stderr', async () => {
     const dataDir = await setupTestEnv('redi-logcheck-');
-    const secret = 'sk-live-E2E-SECRET-XYZ-12345';
+    const secret = 'test-secret-value-that-must-not-leak';
     const writes: string[] = [];
     vi.spyOn(process.stdout, 'write').mockImplementation(((
       chunk: unknown,

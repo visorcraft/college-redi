@@ -1,4 +1,23 @@
-# Redi ☁️
+<h1 align="center">Redi ☁️</h1>
+
+<p align="center">
+  <b>A private, self-hosted college companion for staying organized and on track.</b>
+  <br />
+  Degree planning · registration tracking · deadline reminders · college-email triage · AI chat · MCP access
+</p>
+
+<p align="center">
+  <a href="https://github.com/visorcraft/college-redi/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/visorcraft/college-redi/ci.yml?branch=main&amp;label=CI" alt="CI status" /></a>
+  <img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL-3.0" />
+  <img src="https://img.shields.io/badge/built%20with-TypeScript-3178C6?logo=typescript&amp;logoColor=white" alt="Built with TypeScript" />
+  <img src="https://img.shields.io/badge/framework-Next.js-000000?logo=next.js&amp;logoColor=white" alt="Framework: Next.js" />
+  <img src="https://img.shields.io/badge/database-MongrelDB-1F2D50" alt="Database: MongrelDB" />
+  <img src="https://img.shields.io/badge/deploy-Docker%20%7C%20Podman-333333?logo=docker&amp;logoColor=white" alt="Deployment: Docker or Podman" />
+</p>
+
+---
+
+## What is Redi?
 
 Redi is a single-user, self-hosted web app that helps one college student get through their degree without dropping administrative balls. It does four things:
 
@@ -10,6 +29,8 @@ Redi is a single-user, self-hosted web app that helps one college student get th
 Redi is also the floating navy-blue cloud who leads setup and chats with full access to every system capability.
 
 Every capability is implemented once as a typed tool and exposed through REST, Redi chat, and MCP Streamable HTTP at `/mcp`.
+
+Read the story behind the project in [about.md](about.md).
 
 ## Quickstart
 
@@ -159,3 +180,17 @@ npx playwright test
 ```
 
 Production checklist: [docs/deployment-checklist.md](docs/deployment-checklist.md).
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and pull request guidelines.
+
+## Security
+
+Please report vulnerabilities privately. See [SECURITY.md](SECURITY.md) for supported versions and reporting instructions.
+
+## License
+
+Copyright © 2026 VisorCraft.
+
+Redi is licensed under the [GNU General Public License v3.0 only](LICENSE).
