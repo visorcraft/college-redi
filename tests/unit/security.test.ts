@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   applySecurityHeaders,
   _rateLimitBucketCountForTests,
@@ -72,6 +72,23 @@ describe('security headers', () => {
     } finally {
       if (previous === undefined) delete process.env.TRUST_PROXY_HOPS;
       else process.env.TRUST_PROXY_HOPS = previous;
+    }
+  });
+
+  it('allows Next HMR evaluation and sockets only in development', async () => {
+    try {
+      vi.stubEnv('NODE_ENV', 'development');
+      const development = (await import('../../src/server/security'))
+        .contentSecurityPolicy();
+      expect(development).toContain("'unsafe-eval'");
+      expect(development).toContain("connect-src 'self' ws: wss:");
+      vi.stubEnv('NODE_ENV', 'production');
+      const production = (await import('../../src/server/security'))
+        .contentSecurityPolicy();
+      expect(production).not.toContain("'unsafe-eval'");
+      expect(production).not.toContain('ws:');
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 });

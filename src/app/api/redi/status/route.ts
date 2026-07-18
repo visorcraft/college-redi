@@ -31,7 +31,8 @@ export async function GET() {
   let jobRunning = false;
   try {
     jobRunning = (await sqlRows(
-      `SELECT job_name FROM job_leases WHERE locked_until > ${lit(new Date())}`,
+      `SELECT job_name FROM job_leases WHERE locked_until > ${lit(new Date())} ` +
+      `AND last_status LIKE 'running:%'`,
     )).length > 0;
   } catch {
     // The widget remains usable before the leases table is ready.

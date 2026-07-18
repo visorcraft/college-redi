@@ -1,15 +1,10 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'redi-p3-import-'));
-process.env.DATABASE_MODE = 'embedded';
-process.env.MONGRELDB_PASSPHRASE = 'test-passphrase';
-process.env.MONGRELDB_DB_USERNAME = 'redi';
-process.env.MONGRELDB_DB_PASSWORD = 'test-password';
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import type { Tool } from '../../src/server/tools/registry';
+import { setupTestEnv, teardownTestEnv } from '../helpers/testEnv';
 
 const draftOk = {
   program: {
@@ -54,16 +49,19 @@ vi.mock('../../src/server/ai/client', () => ({
 
 let importModule: typeof import('../../src/server/ai/import');
 let tools: Tool[];
+let dataDir = '';
 const call = (name: string, params: unknown) =>
   tools.find((tool) => tool.name === name)!.handler({ actor: 'test' }, params);
 
 beforeAll(async () => {
+  dataDir = await setupTestEnv('redi-p3-import-');
   const { runMigrations } = await import('../../src/server/db/migrate');
   const { degreeTools } = await import('../../src/server/tools/degree');
   importModule = await import('../../src/server/ai/import');
   await runMigrations();
   tools = degreeTools;
 });
+afterAll(() => teardownTestEnv(dataDir));
 beforeEach(() => createMock.mockReset());
 
 describe('extractAuditText', () => {

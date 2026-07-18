@@ -18,6 +18,7 @@ export default async function middleware(req: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const forwardedHeaders = new Headers(req.headers);
   forwardedHeaders.set('x-nonce', nonce);
+  forwardedHeaders.set('x-redi-secure', String(isSecureRequest(req)));
   forwardedHeaders.set('Content-Security-Policy', contentSecurityPolicy(nonce));
   const next = () => NextResponse.next({
     request: { headers: forwardedHeaders },
@@ -62,7 +63,7 @@ export default async function middleware(req: NextRequest) {
   const isApi = pathname.startsWith('/api/');
 
   if (!session.valid) {
-    if (pathname === '/login' || pathname === '/wizard') {
+    if (pathname === '/' || pathname === '/login' || pathname === '/wizard') {
       return secure(next());
     }
     if (isApi) {
@@ -95,5 +96,7 @@ export default async function middleware(req: NextRequest) {
 
 export const config = {
   runtime: 'nodejs',
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|redi-cloud.svg|redi-cloud.lottie.json).*)',
+  ],
 };

@@ -141,6 +141,12 @@ describe('chat and Redi status routes', () => {
     const { setSecret } = await import('../../src/server/secrets');
     await setSecret('ai.api_key', 'sk-test');
     expect((await (await status.GET()).json()).aiConfigured).toBe(true);
+    const { lit, sqlExec } = await import('../../src/server/db/sql');
+    await sqlExec(
+      `INSERT INTO job_leases (job_name, locked_until, last_run_at, last_status) VALUES (` +
+      `'status-test', ${lit(new Date(Date.now() + 60_000))}, ${lit(new Date())}, 'running:test')`,
+    );
+    expect((await (await status.GET()).json()).jobRunning).toBe(true);
   });
 
   it('returns 503 when AI is not configured', async () => {
@@ -173,6 +179,7 @@ describe('chat and Redi status routes', () => {
       conversations,
       conversation,
       messages,
+      status,
       stub: ai,
     } = await boot(true, [
       {
@@ -206,5 +213,56 @@ describe('chat and Redi status routes', () => {
     expect(detail.messages.map((message: { role: string }) => message.role))
       .toEqual(['user', 'assistant', 'tool', 'assistant']);
     expect(detail.conversation.title).toBe('status check');
+    expect((await (await status.GET()).json()).jobRunning).toBe(false);
+  });
+
+  it('streams a created MCP token once without storing or modeling it', async () => {
+    const {
+      conversations,
+      conversation,
+      messages,
+      stub: ai,
+    } = await boot(true, [
+      {
+        toolCalls: [{
+          name: 'create_mcp_token',
+          arguments: '{"name":"chat-route-token"}',
+        }],
+      },
+      {
+        toolCalls: [{
+          name: 'create_mcp_token',
+          arguments: '{"name":"chat-route-token"}',
+        }],
+      },
+      { content: 'Token created.' },
+    ]);
+    const created = await (await conversations.POST(
+      post('/api/chat/conversations', {}),
+    )).json();
+    const proposed = await messages.POST(
+      post('/messages', { message: 'create an MCP token' }),
+      { params: Promise.resolve({ id: created.id }) },
+    );
+    expect((await readSse(proposed)).some((event) =>
+      String(event.data.text).includes('Confirm this exact sensitive action?')))
+      .toBe(true);
+
+    const confirmed = await messages.POST(
+      post('/messages', { message: 'yes' }),
+      { params: Promise.resolve({ id: created.id }) },
+    );
+    const events = await readSse(confirmed);
+    const ephemeral = events.find((event) => event.event === 'ephemeral');
+    const rawToken = String(ephemeral?.data.result?.token ?? '');
+    expect(ephemeral?.data.name).toBe('create_mcp_token');
+    expect(rawToken).toMatch(/^redi_/);
+
+    const detail = await (await conversation.GET(new Request('http://x'), {
+      params: Promise.resolve({ id: created.id }),
+    })).json();
+    expect(JSON.stringify(detail)).not.toContain(rawToken);
+    expect(JSON.stringify(ai.requests)).not.toContain(rawToken);
+    expect(JSON.stringify(events).split(rawToken)).toHaveLength(2);
   });
 });

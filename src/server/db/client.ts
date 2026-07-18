@@ -6,7 +6,10 @@ import { schema } from '../../../db/schema';
 
 export type AppDb = KitDatabase | RemoteDatabase;
 
-const globalState = globalThis as typeof globalThis & { __rediDb?: AppDb };
+const globalState = globalThis as typeof globalThis & {
+  __rediDb?: AppDb;
+  __rediDbShutdownInstalled?: boolean;
+};
 
 export async function getDb(): Promise<AppDb> {
   if (globalState.__rediDb) return globalState.__rediDb;
@@ -56,7 +59,27 @@ export async function getKitDb(): Promise<KitDatabase> {
   return db;
 }
 
-export function _resetDbForTests(): void {
-  if (globalState.__rediDb instanceof KitDatabase) globalState.__rediDb.close();
+export function closeDb(): void {
+  const db = globalState.__rediDb;
+  if (db instanceof KitDatabase) db.close();
   delete globalState.__rediDb;
+}
+
+export function installDbShutdownHandler(): void {
+  if (globalState.__rediDbShutdownInstalled) return;
+  globalState.__rediDbShutdownInstalled = true;
+  const close = () => {
+    try {
+      closeDb();
+    } catch (error) {
+      console.error('MongrelDB close failed during shutdown:', error);
+    }
+  };
+  // Next drains requests on SIGINT/SIGTERM, then exits. Close after that drain
+  // so an in-flight request never sees its database disappear.
+  process.once('exit', close);
+}
+
+export function _resetDbForTests(): void {
+  closeDb();
 }

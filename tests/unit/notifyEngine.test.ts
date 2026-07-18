@@ -48,6 +48,16 @@ describe('resolveChannels routing matrix (spec §6.5.2)', () => {
     expect(engine.resolveChannels('urgent', s)).toEqual(['in_app']);
     expect(engine.resolveChannels('normal', s, ['sms'])).toEqual(['in_app']);
   });
+
+  it('requires both Twilio sender and destination numbers', () => {
+    expect(engine.twilioConfigured({
+      twilio: {
+        enabled: true,
+        account_sid: 'AC1',
+        to_number: '+1555',
+      },
+    })).toBe(false);
+  });
 });
 
 describe('applyQuietHours boundary (spec §6.5.2)', () => {

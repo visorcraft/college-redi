@@ -192,6 +192,7 @@ export function ChatBubble({
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let ephemeralText = '';
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -216,8 +217,16 @@ export function ChatBubble({
             ) {
               window.dispatchEvent(new CustomEvent('redi:celebrate'));
             }
+          } else if (
+            event === 'ephemeral'
+            && data.name === 'create_mcp_token'
+            && typeof data.result?.token === 'string'
+          ) {
+            ephemeralText =
+              `\n\nMCP token, shown once:\n\`${data.result.token}\``;
+            patchLastAssistant((content) => content + ephemeralText);
           } else if (event === 'done') {
-            patchLastAssistant(() => data.text);
+            patchLastAssistant(() => data.text + ephemeralText);
           } else if (event === 'error') {
             setErrorText(String(data.message));
           }

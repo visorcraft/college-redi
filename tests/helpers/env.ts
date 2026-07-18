@@ -21,7 +21,17 @@ export function makeTestEnv(overrides: Record<string, string> = {}): TestEnv {
   delete process.env.REDI_SETUP_TOKEN;
   delete process.env.TRUST_PROXY_HOPS;
   for (const [k, v] of Object.entries(overrides)) process.env[k] = v;
-  return { dataDir, cleanup: () => rmSync(dataDir, { recursive: true, force: true }) };
+  return {
+    dataDir,
+    cleanup: () => {
+      const state = globalThis as typeof globalThis & {
+        __rediDb?: { close?: () => void };
+      };
+      state.__rediDb?.close?.();
+      delete state.__rediDb;
+      rmSync(dataDir, { recursive: true, force: true });
+    },
+  };
 }
 
 // Each entry is dynamically imported so this helper works in early tasks before

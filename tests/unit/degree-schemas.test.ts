@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   AddRequirementParams, BucketRuleSchema, CourseCode, DegreeImportDraftSchema,
   ImportDegreeAuditParams, UpdatePlannedParams, courseMatchesBucket, courseNumberOfCode,
-  earnsCredits, gradeMeets, gradePoints, normalizeCourseCode, subjectOfCode,
+  earnsCredits, gradeMeets, gradePoints, normalizeCourseCode, parseCourseNumberRanges,
+  subjectOfCode,
 } from '../../src/lib/schemas/degree';
 
 describe('course code helpers', () => {
@@ -36,9 +37,21 @@ describe('grade helpers', () => {
 });
 
 describe('bucket rules', () => {
+  it('parses strict human-readable course number ranges', () => {
+    expect(parseCourseNumberRanges('100-299, 400 - 499')).toEqual([
+      { min: 100, max: 299 },
+      { min: 400, max: 499 },
+    ]);
+    expect(parseCourseNumberRanges('bad')).toBeNull();
+    expect(parseCourseNumberRanges('400-100')).toBeNull();
+  });
+
   it('requires at least one selector', () => {
     expect(BucketRuleSchema.safeParse({}).success).toBe(false);
     expect(BucketRuleSchema.safeParse({ subjects: ['HUM'] }).success).toBe(true);
+    expect(BucketRuleSchema.safeParse({
+      number_ranges: [{ min: 400, max: 100 }],
+    }).success).toBe(false);
   });
   it('matches by subjects, ranges, explicit codes, and combinations', () => {
     const hum = { code: 'HUM 210', subject: 'HUM' };
@@ -83,5 +96,33 @@ describe('DegreeImportDraftSchema', () => {
     expect(DegreeImportDraftSchema.safeParse({
       program: { name: 'X', institution: 'Y', total_credits_required: 120.5 },
     }).success).toBe(false);
+  });
+  it('rejects malformed course and credit-bucket requirements', () => {
+    const program = {
+      name: 'BS Computer Science',
+      institution: 'State University',
+      total_credits_required: 120,
+    };
+    expect(DegreeImportDraftSchema.safeParse({
+      program,
+      requirements: [{ type: 'course', group_name: 'Core' }],
+    }).success).toBe(false);
+    expect(DegreeImportDraftSchema.safeParse({
+      program,
+      requirements: [{
+        type: 'credit_bucket',
+        group_name: 'Electives',
+        credits_required: 6,
+      }],
+    }).success).toBe(false);
+    expect(DegreeImportDraftSchema.safeParse({
+      program,
+      requirements: [{
+        type: 'credit_bucket',
+        group_name: 'Electives',
+        credits_required: 6,
+        bucket_rule: { subjects: ['HUM'] },
+      }],
+    }).success).toBe(true);
   });
 });

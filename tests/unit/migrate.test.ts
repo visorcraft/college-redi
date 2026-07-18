@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeTestEnv, resetServerState, type TestEnv } from '../helpers/env';
-import { getDb } from '@/server/db/client';
+import { _resetDbForTests, getDb } from '@/server/db/client';
 import { runMigrations } from '@/server/db/migrate';
 
 const EXPECTED_TABLES = [
@@ -30,5 +30,7 @@ describe('runMigrations', () => {
     for (const t of EXPECTED_TABLES) expect(names).toContain(t);
     await expect(runMigrations(db)).resolves.toBeUndefined();
     expect(db.tableNames().filter((n) => EXPECTED_TABLES.includes(n)).length).toBe(EXPECTED_TABLES.length);
+    _resetDbForTests();
+    await expect(runMigrations(await getDb())).resolves.toBeUndefined();
   });
 });

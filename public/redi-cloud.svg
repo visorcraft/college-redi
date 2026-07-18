@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 72" role="img" aria-labelledby="title">
+  <title id="title">Redi the cloud</title>
+  <path d="M24 58a14 14 0 0 1-2-27.8A20 20 0 0 1 60 18a16 16 0 0 1 14 24A12 12 0 0 1 72 58Z" fill="#1F2D50"/>
+  <ellipse cx="48" cy="52" rx="23" ry="9" fill="#2E416E"/>
+  <ellipse cx="35.5" cy="38" rx="5" ry="5.6" fill="#fff"/>
+  <ellipse cx="60.5" cy="38" rx="5" ry="5.6" fill="#fff"/>
+  <circle cx="36.5" cy="39" r="2.3" fill="#1F2D50"/>
+  <circle cx="61.5" cy="39" r="2.3" fill="#1F2D50"/>
+  <circle cx="37.3" cy="37.6" r=".9" fill="#fff"/>
+  <circle cx="62.3" cy="37.6" r=".9" fill="#fff"/>
+  <path d="M43 50q5 3.5 10 0" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
+</svg>

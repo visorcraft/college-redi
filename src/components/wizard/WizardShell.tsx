@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RediCloud } from '@/components/redi/RediCloud';
 import { apiFetch } from '@/lib/api';
@@ -20,6 +20,7 @@ import { DoneStep } from './steps/DoneStep';
 export interface SecretFlags { aiKey: boolean; imapPassword: boolean; smtpPassword: boolean; twilioToken: boolean }
 
 const DEFAULT_WIZARD_STATE: WizardState = { completed: false, skipped_steps: [], current_step: 1 };
+const PRE_AUTH_STEP_KEY = 'redi_wizard_step';
 
 export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
   initialSettings: SettingsSnapshot; hasPassword: boolean; secretFlags: SecretFlags;
@@ -31,6 +32,12 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
   const [busy, setBusy] = useState(false);
   const step = stepByN(stepN);
 
+  useEffect(() => {
+    if (!hasPassword && stepN === 1 && localStorage.getItem(PRE_AUTH_STEP_KEY) === '2') {
+      setStepN(2);
+    }
+  }, [hasPassword, stepN]);
+
   async function persist(patch: Record<string, unknown>, next: number, opts: { skippedId?: string; unskipId?: string } = {}) {
     setBusy(true);
     try {
@@ -38,6 +45,7 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
       const updated = await apiFetch('/api/settings', { method: 'PATCH', body: { ...patch, wizard_state: nextWizard } });
       setSettings(updated);
       setStepN(next);
+      router.refresh();
     } finally {
       setBusy(false);
     }
@@ -45,7 +53,28 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
 
   const onComplete = (patch?: Record<string, unknown>) => persist(patch ?? {}, stepN + 1, { unskipId: step.id });
   const onSkip = step.skippable ? () => persist({}, stepN + 1, { skippedId: step.id }) : undefined;
-  const onBack = stepN > 1 && step.id !== 'done' ? () => persist({}, stepN - 1) : undefined;
+  const onBack = stepN > 1 && step.id !== 'done'
+    ? stepN === 2 && !hasPassword
+      ? () => {
+          localStorage.removeItem(PRE_AUTH_STEP_KEY);
+          setStepN(1);
+        }
+      : () => persist({}, stepN - 1)
+    : undefined;
+
+  async function onWelcomeComplete() {
+    if (hasPassword) {
+      await persist({}, 2, { unskipId: step.id });
+      return;
+    }
+    localStorage.setItem(PRE_AUTH_STEP_KEY, '2');
+    setStepN(2);
+  }
+
+  async function onLoginComplete() {
+    await onComplete();
+    localStorage.removeItem(PRE_AUTH_STEP_KEY);
+  }
 
   async function onSaveChecklist(items: PendingChecklistItem[]) {
     setBusy(true);
@@ -75,8 +104,8 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
       <RediCloud mood={step.id === 'done' ? 'happy' : 'idle'} size={96} />
       <p className="text-center text-lg leading-relaxed text-[#1F2D50]">{step.redi}</p>
       <div className="w-full rounded-2xl bg-white p-6 shadow-sm">
-        {step.id === 'welcome' && <WelcomeStep onComplete={async () => setStepN(2)} busy={busy} />}
-        {step.id === 'login' && <LoginStep hasPassword={hasPassword} onComplete={onComplete} busy={busy} />}
+        {step.id === 'welcome' && <WelcomeStep onComplete={onWelcomeComplete} busy={busy} />}
+        {step.id === 'login' && <LoginStep hasPassword={hasPassword} onComplete={onLoginComplete} busy={busy} />}
         {step.id === 'ai' && <AiStep settings={settings} onComplete={onComplete} busy={busy} />}
         {step.id === 'imap' && <ImapStep settings={settings} onComplete={onComplete} busy={busy} />}
         {step.id === 'smtp' && <SmtpStep settings={settings} onComplete={onComplete} busy={busy} />}
@@ -86,7 +115,7 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
         {step.id === 'notifications' && <NotificationsStep settings={settings} onComplete={onComplete} busy={busy} preferBrowserTimezone />}
         {step.id === 'done' && <DoneStep settings={settings} secretFlags={secretFlags} onFinish={onFinish} busy={busy} />}
       </div>
-      <div className="flex w-full items-center justify-between text-sm text-[#1F2D50]/70">
+      <div className="flex w-full items-center justify-between pr-20 text-sm text-[#1F2D50]/70 sm:pr-0">
         <span>Step {stepN} of 10 — {step.title}</span>
         <span className="flex items-center gap-4">
           {onBack && <button type="button" onClick={onBack} disabled={busy} className="underline">Back</button>}

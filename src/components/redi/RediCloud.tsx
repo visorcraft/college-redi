@@ -1,50 +1,95 @@
+import React from 'react';
+import Image from 'next/image';
+import type { RediState } from './widgetState';
+
 export type RediMood = 'sleepy' | 'idle' | 'happy' | 'sad';
 
-export function RediCloud({ mood = 'idle', size = 72, className = '' }: { mood?: RediMood; size?: number; className?: string }) {
+const LEGACY_STATE: Record<RediMood, RediState> = {
+  sleepy: 'sleepy',
+  idle: 'idle',
+  happy: 'celebrating',
+  sad: 'alert',
+};
+
+const DECORATION: Record<RediState, string> = {
+  sleepy: 'zZ',
+  idle: '',
+  thinking: '•••',
+  alert: '!',
+  celebrating: '✦',
+};
+
+export function RediCloud({
+  state,
+  mood = 'idle',
+  size = 72,
+  className = '',
+}: {
+  state?: RediState;
+  mood?: RediMood;
+  size?: number;
+  className?: string;
+}) {
+  const visualState = state ?? LEGACY_STATE[mood];
   return (
-    <span className={`redi-cloud ${className}`} role="img" aria-label={`Redi the cloud (${mood})`}
-      style={{ display: 'inline-block', width: size, height: size * 0.75 }}>
+    <span
+      className={`redi-cloud ${className}`}
+      data-redi-state={visualState}
+      role="img"
+      aria-label={`Redi the cloud (${visualState})`}
+      style={{
+        display: 'inline-block',
+        position: 'relative',
+        width: size,
+        height: size * 0.75,
+      }}
+    >
       <style>{`
+        .redi-cloud__asset { display: block; height: 100%; width: 100%; }
+        [data-redi-state="sleepy"] .redi-cloud__asset { opacity: .68; transform: scale(.92); }
+        [data-redi-state="thinking"] .redi-cloud__asset { filter: drop-shadow(0 0 4px #FFC24B); transform: scale(1.03); }
+        [data-redi-state="alert"] .redi-cloud__asset { filter: drop-shadow(0 0 7px #FFC24B); transform: rotate(-5deg); }
+        [data-redi-state="celebrating"] .redi-cloud__asset { filter: drop-shadow(0 0 8px #FFC24B); transform: rotate(6deg) scale(1.08); }
         @keyframes redi-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-        @media (prefers-reduced-motion: no-preference) { .redi-cloud > svg { animation: redi-bob 3.2s ease-in-out infinite; } }
+        @keyframes redi-think { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+        @keyframes redi-alert { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+        @keyframes redi-celebrate { 0%, 100% { transform: translateY(0) rotate(6deg); } 50% { transform: translateY(-7px) rotate(-6deg); } }
+        @media (prefers-reduced-motion: no-preference) {
+          [data-redi-state="idle"] .redi-cloud__asset { animation: redi-bob 3.2s ease-in-out infinite; }
+          [data-redi-state="thinking"] .redi-cloud__asset { animation: redi-think .8s ease-in-out infinite; }
+          [data-redi-state="alert"] .redi-cloud__asset { animation: redi-alert .55s ease-in-out infinite; }
+          [data-redi-state="celebrating"] .redi-cloud__asset { animation: redi-celebrate .75s ease-in-out infinite; }
+        }
       `}</style>
-      <svg viewBox="0 0 96 72" width="100%" height="100%">
-        <path d="M24 58a14 14 0 0 1-2-27.8A20 20 0 0 1 60 18a16 16 0 0 1 14 24A12 12 0 0 1 72 58Z" fill="#1F2D50" />
-        <ellipse cx="48" cy="52" rx="23" ry="9" fill="#2E416E" />
-        {mood === 'sleepy' && (
-          <>
-            <path d="M31 40q4.5 3.5 9 0" stroke="#fff" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-            <path d="M56 40q4.5 3.5 9 0" stroke="#fff" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-            <text x="72" y="20" fontSize="11" fill="#2E416E" fontWeight="bold">z</text>
-            <text x="78" y="12" fontSize="8" fill="#2E416E" fontWeight="bold">z</text>
-          </>
-        )}
-        {mood === 'happy' && (
-          <>
-            <path d="M31 42q4.5-5 9 0" stroke="#fff" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-            <path d="M56 42q4.5-5 9 0" stroke="#fff" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-          </>
-        )}
-        {(mood === 'idle' || mood === 'sad') && (
-          <>
-            <ellipse cx="35.5" cy="38" rx="5" ry="5.6" fill="#fff" />
-            <ellipse cx="60.5" cy="38" rx="5" ry="5.6" fill="#fff" />
-            <circle cx="36.5" cy="39" r="2.3" fill="#1F2D50" />
-            <circle cx="61.5" cy="39" r="2.3" fill="#1F2D50" />
-            <circle cx="37.3" cy="37.6" r="0.9" fill="#fff" />
-            <circle cx="62.3" cy="37.6" r="0.9" fill="#fff" />
-            {mood === 'sad' && (
-              <>
-                <path d="M30 30l10 2.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-                <path d="M66 30l-10 2.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-              </>
-            )}
-          </>
-        )}
-        {mood === 'idle' && <path d="M43 50q5 3.5 10 0" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" />}
-        {mood === 'happy' && <path d="M41 49q7 6 14 0" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" />}
-        {mood === 'sad' && <path d="M43 53q5-3.5 10 0" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" />}
-      </svg>
+      <Image
+        src="/redi-cloud.svg"
+        alt=""
+        aria-hidden="true"
+        width={size}
+        height={Math.round(size * 0.75)}
+        unoptimized
+        className="redi-cloud__asset"
+      />
+      {DECORATION[visualState] && (
+        <span
+          aria-hidden="true"
+          data-redi-decoration={visualState}
+          style={{
+            position: 'absolute',
+            right: visualState === 'thinking' ? '30%' : '-4%',
+            top: visualState === 'thinking' ? '72%' : '-6%',
+            borderRadius: 999,
+            background: visualState === 'sleepy' ? 'transparent' : '#FFC24B',
+            color: '#1F2D50',
+            fontSize: Math.max(10, size * 0.18),
+            fontWeight: 800,
+            lineHeight: 1,
+            padding: visualState === 'sleepy' ? 0 : '0.2em 0.35em',
+          }}
+        >
+          {DECORATION[visualState]}
+        </span>
+      )}
     </span>
   );
 }

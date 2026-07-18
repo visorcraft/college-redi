@@ -1,5 +1,9 @@
+import { createHash } from 'node:crypto';
 import { KitDatabase } from '@visorcraft/mongreldb-kit';
+import nodemailer from 'nodemailer';
+import twilio from 'twilio';
 import { z } from 'zod';
+import { getAiClient } from '../ai/client';
 import { getConfig } from '../config';
 import { getDb } from '../db/client';
 import { getSecret } from '../secrets';
@@ -13,6 +17,10 @@ const searchAllParams = z.object({
   query: z.string().trim().min(1).max(200),
   limit: z.number().int().min(1).max(100).default(25),
 });
+const systemStatusParams = z.object({
+  probe_connections: z.boolean().default(false),
+  probe_ai: z.boolean().default(false),
+});
 
 type SearchRow = Record<string, unknown> & { id: string };
 type SearchResult = {
@@ -21,6 +29,91 @@ type SearchResult = {
   title: string;
   detail: string | null;
 };
+
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+async function checkAi(configured: boolean) {
+  if (!configured) return { reachable: false, error: 'not configured' };
+  try {
+    const { client, model } = await getAiClient();
+    await client.chat.completions.create({
+      model,
+      messages: [{ role: 'user', content: 'Reply ok.' }],
+      max_completion_tokens: 1,
+    }, { timeout: 3_000 });
+    return { reachable: true };
+  } catch (error) {
+    return { reachable: false, error: errorMessage(error) };
+  }
+}
+
+let recentHealth: {
+  ai?: { key: string; checkedAt: number; value: Awaited<ReturnType<typeof checkAi>> };
+  smtp?: { key: string; checkedAt: number; value: Awaited<ReturnType<typeof checkSmtp>> };
+  twilio?: { key: string; checkedAt: number; value: Awaited<ReturnType<typeof checkTwilio>> };
+} = {};
+let aiProbe: {
+  key: string;
+  promise: Promise<Awaited<ReturnType<typeof checkAi>>>;
+} | null = null;
+const HEALTH_TTL_MS = 5 * 60_000;
+
+const fingerprint = (value: string | null) =>
+  value === null
+    ? 'none'
+    : createHash('sha256').update(value).digest('hex');
+
+async function refreshAiHealth(configured: boolean, key: string) {
+  if (aiProbe?.key !== key) {
+    const promise = checkAi(configured).finally(() => {
+      if (aiProbe?.promise === promise) aiProbe = null;
+    });
+    aiProbe = { key, promise };
+  }
+  return aiProbe.promise;
+}
+
+async function checkSmtp(
+  settings: Awaited<ReturnType<typeof getSettings>>,
+  password: string | null,
+) {
+  const smtp = settings.smtp;
+  if (!smtp.host || !password) return { valid: false, error: 'not configured' };
+  const transport = nodemailer.createTransport({
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.security === 'tls',
+    requireTLS: smtp.security === 'starttls',
+    auth: smtp.username ? { user: smtp.username, pass: password } : undefined,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 10_000,
+  });
+  try {
+    await transport.verify();
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: errorMessage(error) };
+  } finally {
+    transport.close();
+  }
+}
+
+async function checkTwilio(
+  settings: Awaited<ReturnType<typeof getSettings>>,
+  token: string | null,
+) {
+  const accountSid = settings.twilio.account_sid;
+  if (!accountSid || !token) return { valid: false, error: 'not configured' };
+  try {
+    await twilio(accountSid, token, { timeout: 10_000 })
+      .api.accounts(accountSid).fetch();
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: errorMessage(error) };
+  }
+}
 
 const searchHit = (
   kind: SearchResult['kind'],
@@ -90,31 +183,106 @@ export const getSystemStatusTool: Tool = defineTool({
   description:
     'Health of the database, AI provider, IMAP/SMTP/Twilio channels, and scheduler, plus last poll times and notification backlog.',
   sideEffect: 'read',
-  paramsSchema: z.object({}),
-  handler: async () => {
+  paramsSchema: systemStatusParams,
+  handler: async (_context, params) => {
     const cfg = getConfig();
     const settings = await getSettings();
     const db = await getDb();
     let dbStatus: Record<string, unknown>;
     try {
       if (db instanceof KitDatabase) {
-        dbStatus = { mode: 'embedded', ok: true, tables: db.tableNames().length };
+        dbStatus = {
+          mode: 'embedded',
+          lock: 'held by this Redi process',
+          ok: true,
+          tables: db.tableNames().length,
+        };
       } else {
-        dbStatus = { mode: 'remote', ok: db.health().length > 0, tables: db.tableNames().length };
+        dbStatus = {
+          mode: 'remote',
+          lock: 'managed by MongrelDB daemon',
+          ok: db.health().length > 0,
+          tables: db.tableNames().length,
+        };
       }
     } catch (err) {
       dbStatus = { mode: cfg.DATABASE_MODE, ok: false, error: err instanceof Error ? err.message : String(err) };
     }
-    const pending = (await sqlRows<{ id: string }>(
-      "SELECT id FROM notifications WHERE status = 'pending'",
-    )).length;
+    const [pendingRows, deliveryRows] = await Promise.all([
+      sqlRows<{ id: string }>(
+        "SELECT id FROM notifications WHERE status = 'pending'",
+      ),
+      sqlRows<{
+        channel: string;
+        status: string;
+        notification_status: string;
+      }>(
+        `SELECT h.channel, h.status, n.status AS notification_status ` +
+        `FROM notification_history h JOIN notifications n ON n.id = h.notification_id ` +
+        `WHERE h.channel IN ('email', 'sms') ORDER BY h.sent_at DESC`,
+      ),
+    ]);
+    const pending = pendingRows.length;
+    const latestDelivery = new Map<string, (typeof deliveryRows)[number]>();
+    for (const row of deliveryRows) {
+      if (!latestDelivery.has(row.channel)) latestDelivery.set(row.channel, row);
+    }
+    const deliveryFailed = (channel: 'email' | 'sms') => {
+      const latest = latestDelivery.get(channel);
+      return latest?.status === 'failed' && latest.notification_status === 'failed';
+    };
     const [aiKey, imapPassword, smtpPassword, twilioToken] = await Promise.all([
       getSecret('ai.api_key'),
       getSecret('imap.password'),
       getSecret('smtp.password'),
       getSecret('twilio.auth_token'),
     ]);
+    const healthKeys = {
+      ai: `${fingerprint(aiKey)}:${settings.ai.base_url}:${settings.ai.model}`,
+      smtp: `${fingerprint(smtpPassword)}:${settings.smtp.host}:${settings.smtp.port}:${settings.smtp.username}`,
+      twilio: `${fingerprint(twilioToken)}:${settings.twilio.account_sid}`,
+    };
+    const now = Date.now();
+    if (params.probe_connections) {
+      const [ai, smtp, twilioStatus] = await Promise.all([
+        refreshAiHealth(aiKey !== null, healthKeys.ai),
+        checkSmtp(settings, smtpPassword),
+        checkTwilio(settings, twilioToken),
+      ]);
+      recentHealth = {
+        ai: { key: healthKeys.ai, checkedAt: Date.now(), value: ai },
+        smtp: { key: healthKeys.smtp, checkedAt: Date.now(), value: smtp },
+        twilio: { key: healthKeys.twilio, checkedAt: Date.now(), value: twilioStatus },
+      };
+    } else if (
+      (params.probe_ai || _context.actor.startsWith('mcp:'))
+      && (
+        recentHealth.ai?.key !== healthKeys.ai
+        || now - recentHealth.ai.checkedAt >= HEALTH_TTL_MS
+      )
+    ) {
+      const ai = await refreshAiHealth(aiKey !== null, healthKeys.ai);
+      recentHealth.ai = {
+        key: healthKeys.ai,
+        checkedAt: Date.now(),
+        value: ai,
+      };
+    }
     const aiUsage = await getAiUsageStatus();
+    const cached = {
+      ai: recentHealth.ai?.key === healthKeys.ai
+        && now - recentHealth.ai.checkedAt < HEALTH_TTL_MS
+        ? recentHealth.ai.value
+        : undefined,
+      smtp: recentHealth.smtp?.key === healthKeys.smtp
+        && now - recentHealth.smtp.checkedAt < HEALTH_TTL_MS
+        ? recentHealth.smtp.value
+        : undefined,
+      twilio: recentHealth.twilio?.key === healthKeys.twilio
+        && now - recentHealth.twilio.checkedAt < HEALTH_TTL_MS
+        ? recentHealth.twilio.value
+        : undefined,
+    };
     return {
       db: dbStatus,
       ai: {
@@ -124,6 +292,7 @@ export const getSystemStatusTool: Tool = defineTool({
         effort: settings.ai.effort,
         calls_today: aiUsage.callsToday,
         daily_cap: aiUsage.dailyCap,
+        ...cached.ai,
       },
       imap: {
         configured: settings.imap.host.length > 0 && imapPassword !== null,
@@ -131,10 +300,21 @@ export const getSystemStatusTool: Tool = defineTool({
         last_poll_at: settings.imap.last_poll_at,
         last_error: settings.imap.last_error,
       },
-      smtp: { configured: settings.smtp.host.length > 0 && smtpPassword !== null, enabled: settings.smtp.enabled },
+      smtp: {
+        configured: settings.smtp.host.length > 0 && smtpPassword !== null,
+        enabled: settings.smtp.enabled,
+        ...cached.smtp,
+        last_delivery_error: deliveryFailed('email')
+          ? 'A scheduled email failed after all retries.'
+          : null,
+      },
       twilio: {
         configured: settings.twilio.account_sid.length > 0 && twilioToken !== null,
         enabled: settings.twilio.enabled,
+        ...cached.twilio,
+        last_delivery_error: deliveryFailed('sms')
+          ? 'A scheduled text message failed after all retries.'
+          : null,
       },
       scheduler: { enabled: cfg.SCHEDULER_ENABLED, alive: isSchedulerAlive() },
       notifications: { pending },

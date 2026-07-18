@@ -10,24 +10,8 @@ import { getAllTools } from '../tools/registry';
 
 export { verifyMcpToken } from '../tools/mcpTokens';
 
-const BLOCKED_TOOLS = new Set([
-  'update_settings',
-  'set_secret',
-  'create_mcp_token',
-  'list_mcp_tokens',
-  'revoke_mcp_token',
-  'send_test_notification',
-  'import_degree_audit',
-  'confirm_degree_import',
-]);
-
-function isMcpTool(name: string): boolean {
-  return !BLOCKED_TOOLS.has(name)
-    && !(name.startsWith('test_') && name.endsWith('_connection'));
-}
-
 function mcpTools() {
-  return getAllTools().filter(({ name }) => isMcpTool(name));
+  return getAllTools();
 }
 
 function asArray(result: unknown, ...keys: string[]): unknown[] {

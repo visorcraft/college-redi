@@ -67,6 +67,8 @@ export async function POST(
             send('tool', { phase: 'start', name: event.name });
           } else if (event.type === 'tool_end') {
             send('tool', { phase: 'end', name: event.name });
+          } else if (event.type === 'ephemeral_result') {
+            send('ephemeral', { name: event.name, result: event.result });
           } else if (event.type === 'done') send('done', { text: event.text });
         });
       } catch (error) {

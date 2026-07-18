@@ -13,3 +13,14 @@ export async function GET(req: NextRequest) {
     return apiError(error);
   }
 }
+
+export async function POST(req: NextRequest) {
+  try {
+    return NextResponse.json(
+      await callTool('schedule_notification', await req.json(), { actor: 'user' }),
+      { status: 201 },
+    );
+  } catch (error) {
+    return apiError(error);
+  }
+}

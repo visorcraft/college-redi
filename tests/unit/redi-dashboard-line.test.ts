@@ -18,19 +18,24 @@ describe('buildDashboardLine', () => {
   it('reports AI trouble first', async () => {
     const { buildDashboardLine, callTool } = await subject();
     callTool.mockImplementation(async (name: string) => {
-      if (name === 'get_system_status') return { ai: { ok: false } };
+      if (name === 'get_system_status') return { ai: { reachable: false } };
       return name === 'list_notifications'
         ? { notifications: [] }
         : { tasks: [] };
     });
     expect((await buildDashboardLine()).line).toContain('AI brain is offline');
+    expect(callTool).toHaveBeenCalledWith(
+      'get_system_status',
+      { probe_connections: false, probe_ai: true },
+      { actor: 'system' },
+    );
   });
 
   it('leads with what is due today, then unread counts, then all-clear', async () => {
     const { buildDashboardLine, callTool } = await subject();
     const today = new Date().toISOString();
     callTool.mockImplementation(async (name: string) => {
-      if (name === 'get_system_status') return { ai: { ok: true } };
+      if (name === 'get_system_status') return { ai: { reachable: true } };
       if (name === 'list_tasks') {
         return {
           tasks: [
@@ -50,14 +55,14 @@ describe('buildDashboardLine', () => {
     expect(first.unreadCount).toBe(3);
 
     callTool.mockImplementation(async (name: string) => {
-      if (name === 'get_system_status') return { ai: { ok: true } };
+      if (name === 'get_system_status') return { ai: { reachable: true } };
       if (name === 'list_tasks') return { tasks: [] };
       return { notifications: [{}, {}] };
     });
     expect((await buildDashboardLine()).line).toContain('2 unread updates');
 
     callTool.mockImplementation(async (name: string) => {
-      if (name === 'get_system_status') return { ai: { ok: true } };
+      if (name === 'get_system_status') return { ai: { reachable: true } };
       if (name === 'list_tasks') return { tasks: [] };
       return { notifications: [] };
     });

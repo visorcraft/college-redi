@@ -99,8 +99,8 @@ export default function EmailPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-6 text-[#1F2D50]">
-      <div className="mb-6 flex items-center justify-between">
+    <main className="mx-auto w-full min-w-0 max-w-3xl p-4 text-[#1F2D50] sm:p-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">College email</h1>
         <button
           onClick={() => void checkNow()}
@@ -125,18 +125,18 @@ export default function EmailPage() {
           {events.map((event) => (
             <li
               key={event.id}
-              className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm"
+              className="flex min-w-0 flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
             >
-              <div>
-                <p className="font-medium">{event.title}</p>
-                <p className="text-sm opacity-70">
+              <div className="min-w-0">
+                <p className="break-words font-medium">{event.title}</p>
+                <p className="break-words text-sm opacity-70">
                   {event.due_at
                     ? new Date(event.due_at).toLocaleString()
                     : 'date needs confirmation'}{' '}
                   · {Math.round(event.confidence * 100)}% sure · from “{event.email_subject}”
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex shrink-0 flex-wrap gap-2">
                 <button
                   onClick={() => void reviewEvent(event.id, 'accept')}
                   className="rounded-xl bg-[#1F2D50] px-3 py-1 text-sm text-white"
@@ -156,9 +156,9 @@ export default function EmailPage() {
       </section>
 
       <section aria-labelledby="processed" className="mb-8">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 id="processed" className="text-lg font-semibold">Processed ({total})</h2>
-          <div className="flex gap-1">
+          <div className="flex max-w-full flex-wrap gap-1">
             {FILTERS.map((item) => (
               <button
                 key={item}
@@ -176,19 +176,19 @@ export default function EmailPage() {
         <ul className="space-y-2">
           {emails.map((email) => (
             <li key={email.id} className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                   BADGE[email.classification] ?? BADGE.unprocessed
                 }`}
                 >
                   {email.classification}
                 </span>
-                <p className="font-medium">{email.subject}</p>
+                <p className="min-w-0 break-words font-medium">{email.subject}</p>
               </div>
-              <p className="text-sm opacity-70">
+              <p className="break-all text-sm opacity-70">
                 {email.from_addr} · {new Date(email.received_at).toLocaleString()}
               </p>
-              {email.summary && <p className="mt-1 text-sm">{email.summary}</p>}
+              {email.summary && <p className="mt-1 break-words text-sm">{email.summary}</p>}
             </li>
           ))}
         </ul>
@@ -196,18 +196,18 @@ export default function EmailPage() {
 
       <section aria-labelledby="rules">
         <h2 id="rules" className="mb-2 text-lg font-semibold">Sender rules</h2>
-        <div className="mb-3 flex gap-2">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row">
           <input
             value={pattern}
             onChange={(event) => setPattern(event.target.value)}
             placeholder="address or domain, e.g. spammy.edu"
-            className="flex-1 rounded-xl border border-[#1F2D50]/20 px-3 py-2"
+            className="min-w-0 flex-1 rounded-xl border border-[#1F2D50]/20 px-3 py-2"
             aria-label="Sender pattern"
           />
           <select
             value={action}
             onChange={(event) => setAction(event.target.value as 'junk' | 'important')}
-            className="rounded-xl border border-[#1F2D50]/20 px-3 py-2"
+            className="w-full rounded-xl border border-[#1F2D50]/20 px-3 py-2 sm:w-auto"
             aria-label="Rule action"
           >
             <option value="junk">always junk</option>
@@ -226,7 +226,7 @@ export default function EmailPage() {
               key={rule.id}
               className="flex items-center justify-between rounded-2xl bg-white p-3 shadow-sm"
             >
-              <p className="text-sm">
+              <p className="min-w-0 break-all text-sm">
                 <span className="font-medium">{rule.pattern}</span> →{' '}
                 {rule.action === 'junk' ? 'always junk' : 'always important'}
               </p>

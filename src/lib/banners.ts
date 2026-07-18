@@ -40,20 +40,39 @@ export function buildBanners(settings: BannerSettings, status: unknown): Banner[
     if (meta) push({ id: `skip:${step}`, ...meta });
   }
 
-  // Channel failures from get_system_status — read defensively; only an explicit
-  // ok === false produces a banner (Phase 1 owns the exact status shape).
-  const checks = (status as { checks?: unknown } | null)?.checks;
-  if (checks && typeof checks === 'object') {
-    for (const [name, check] of Object.entries(checks as Record<string, { ok?: boolean; error?: string }>)) {
+  const checks = status && typeof status === 'object'
+    ? status as Record<string, {
+        configured?: boolean;
+        reachable?: boolean;
+        valid?: boolean;
+        last_error?: string | null;
+        last_delivery_error?: string | null;
+        error?: string;
+      }>
+    : {};
+  for (const [name, check] of Object.entries(checks)) {
+    if (check && typeof check === 'object') {
+      const failed = name === 'ai'
+        ? check.configured !== false && check.reachable === false
+        : name === 'imap'
+          ? Boolean(check.last_error)
+          : check.configured !== false
+            && (check.valid === false || Boolean(check.last_delivery_error));
+      if (failed) {
       const meta = CHANNEL_BANNERS[name];
-      if (meta && check && check.ok === false) {
+      if (meta) {
         push({
           id: `channel:${name}`,
-          text: `${meta.label} needs attention${check.error ? `: ${check.error}` : '.'}`,
+          text: `${meta.label} needs attention${
+            check.error || check.last_error || check.last_delivery_error
+              ? `: ${check.error ?? check.last_error ?? check.last_delivery_error}`
+              : '.'
+          }`,
           href: meta.href,
         });
       }
     }
+  }
   }
 
   // Fallback when status is unavailable: the persisted last IMAP poll error.

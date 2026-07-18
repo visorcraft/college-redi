@@ -96,6 +96,15 @@ describe('notification tools', () => {
     expect(list.notifications[0]?.title).toBe('Email my advisor');
   });
 
+  it('rejects an explicitly requested unconfigured external channel', async () => {
+    await expect(callTool('schedule_notification', {
+      title: 'Email my advisor',
+      body: 'Ask about CS 201',
+      scheduled_for: '2026-03-13T15:00:00.000Z',
+      channels: ['email'],
+    }, CTX)).rejects.toThrow(/email delivery is not configured/i);
+  });
+
   it('exposes list and mark-all REST adapters', async () => {
     await seed('via-rest');
     const route = await import('../../src/app/api/notifications/route');

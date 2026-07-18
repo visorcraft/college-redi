@@ -5,6 +5,7 @@ import { defineTool, listTools, registerTool } from '@/server/tools/registry';
 import { callTool, ToolConfirmationRequiredError, ToolNotFoundError, ToolValidationError } from '@/server/tools/call';
 import { registerAllTools } from '@/server/tools';
 import { getKitDb } from '@/server/db/client';
+import { sqlExec } from '@/server/db/sql';
 import { auditLog } from '../../db/schema';
 
 let env: TestEnv;
@@ -82,12 +83,42 @@ describe('settings & system tools', () => {
   it('get_system_status reports db/ai/imap/smtp/twilio/scheduler shape', async () => {
     registerAllTools();
     const status = (await callTool('get_system_status', {}, ctx)) as Record<string, any>;
-    expect(status.db).toMatchObject({ mode: 'embedded', ok: true });
+    expect(status.db).toMatchObject({
+      mode: 'embedded',
+      lock: 'held by this Redi process',
+      ok: true,
+    });
     expect(status.db.tables).toBeGreaterThanOrEqual(19);
     expect(status.ai).toMatchObject({ configured: false, model: 'gpt-5.6-luna', effort: 'medium' });
     expect(status.imap).toMatchObject({ configured: false, enabled: false, last_poll_at: null });
+    expect(status.smtp).toMatchObject({ configured: false });
+    expect(status.twilio).toMatchObject({ configured: false });
     expect(status.scheduler).toMatchObject({ enabled: false, alive: false });
     expect(status.notifications).toMatchObject({ pending: 0 });
+  });
+
+  it('get_system_status reports an exhausted delivery without leaking its destination', async () => {
+    registerAllTools();
+    const notification = await callTool('schedule_notification', {
+      title: 'Deadline',
+      body: 'Submit the form.',
+      scheduled_for: '2026-07-17T12:00:00.000Z',
+      channels: ['email'],
+    }, ctx) as { id: string };
+    await sqlExec(
+      `UPDATE notifications SET status = 'failed' WHERE id = '${notification.id}'`,
+    );
+    await sqlExec(
+      `INSERT INTO notification_history (` +
+      `id, notification_id, channel, destination, status, provider_response, attempt, sent_at` +
+      `) VALUES (` +
+      `'history-failed', '${notification.id}', 'email', 'student@example.com', ` +
+      `'failed', '{"error":"auth failed"}', 4, '2026-07-17T12:05:00.000Z')`,
+    );
+    const status = await callTool('get_system_status', {}, ctx) as Record<string, any>;
+    expect(status.smtp.last_delivery_error)
+      .toBe('A scheduled email failed after all retries.');
+    expect(JSON.stringify(status)).not.toContain('student@example.com');
   });
 
   it('search_all finds tasks, courses, emails, and notifications without case sensitivity', async () => {

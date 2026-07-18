@@ -35,9 +35,12 @@ export function applySecurityHeaders(
 }
 
 export function contentSecurityPolicy(nonce?: string): string {
+  const development = process.env.NODE_ENV === 'development';
   return `default-src 'self'; script-src 'self'${
     nonce ? ` 'nonce-${nonce}'` : ''
-  }; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`;
+  }${development ? " 'unsafe-eval'" : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'${
+    development ? ' ws: wss:' : ''
+  }; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`;
 }
 
 export function csrfFailure(request: NextRequest): NextResponse | null {

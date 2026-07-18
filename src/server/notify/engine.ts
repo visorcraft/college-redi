@@ -39,7 +39,12 @@ const DEFAULT_QUIET_HOURS = { start: '22:00', end: '08:00' };
 export const smtpConfigured = (s: EngineSettings) =>
   Boolean(s.smtp?.enabled && s.smtp.host && s.smtp.personal_email);
 export const twilioConfigured = (s: EngineSettings) =>
-  Boolean(s.twilio?.enabled && s.twilio.account_sid && s.twilio.to_number);
+  Boolean(
+    s.twilio?.enabled
+    && s.twilio.account_sid
+    && s.twilio.from_number
+    && s.twilio.to_number,
+  );
 
 export function resolveChannels(
   importance: Importance,

@@ -41,6 +41,18 @@ export function courseNumberOfCode(code: string): number {
   return m ? Number(m[1]) : 0;
 }
 
+export function parseCourseNumberRanges(
+  value: string,
+): Array<{ min: number; max: number }> | null {
+  const ranges = [];
+  for (const part of value.split(',').map((item) => item.trim()).filter(Boolean)) {
+    const match = /^(\d{1,4})\s*-\s*(\d{1,4})$/.exec(part);
+    if (!match || Number(match[1]) > Number(match[2])) return null;
+    ranges.push({ min: Number(match[1]), max: Number(match[2]) });
+  }
+  return ranges;
+}
+
 export const RequirementTypeSchema = z.enum(['course', 'credit_bucket', 'gpa', 'milestone']);
 export const RegistrationStatusSchema = z.enum(['planned', 'registered', 'waitlisted', 'dropped', 'completed']);
 export const CompletedStatusSchema = z.enum(['completed', 'in_progress', 'transfer']);
@@ -50,9 +62,16 @@ export const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM
 export const IsoTimestamp = z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'expected an ISO timestamp');
 const uuid = z.string().uuid();
 
+const CourseNumberRangeSchema = z.object({
+  min: z.number().int().min(0).max(9999),
+  max: z.number().int().min(0).max(9999),
+}).refine((range) => range.min <= range.max, {
+  message: 'course number range minimum must not exceed maximum',
+});
+
 export const BucketRuleSchema = z.object({
   subjects: z.array(z.string().trim().min(1).max(12)).optional(),
-  number_ranges: z.array(z.object({ min: z.number().int().min(0).max(9999), max: z.number().int().min(0).max(9999) })).optional(),
+  number_ranges: z.array(CourseNumberRangeSchema).optional(),
   course_codes: z.array(CourseCode).optional(),
 }).refine((r) => Boolean(r.subjects?.length || r.number_ranges?.length || r.course_codes?.length), {
   message: 'bucket_rule needs subjects, number_ranges, or course_codes',
@@ -173,6 +192,30 @@ export const ImportRequirementSchema = z.object({
   group_name: z.string().trim().min(1).max(100),
   description: z.string().trim().max(500).optional(),
   sort_order: z.number().int().min(0).optional(),
+}).superRefine((requirement, context) => {
+  if (requirement.type === 'course' && !requirement.course_code) {
+    context.addIssue({
+      code: 'custom',
+      path: ['course_code'],
+      message: 'course requirements need a course code',
+    });
+  }
+  if (requirement.type === 'credit_bucket') {
+    if (!requirement.credits_required) {
+      context.addIssue({
+        code: 'custom',
+        path: ['credits_required'],
+        message: 'credit buckets need required credits',
+      });
+    }
+    if (!requirement.bucket_rule) {
+      context.addIssue({
+        code: 'custom',
+        path: ['bucket_rule'],
+        message: 'credit buckets need a subject or course selector',
+      });
+    }
+  }
 });
 export const ImportCourseSchema = z.object({
   code: CourseCode,

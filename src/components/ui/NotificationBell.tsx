@@ -32,7 +32,7 @@ export function NotificationBell() {
     <Link
       href="/notifications"
       aria-label={`Notifications, ${unread} unread`}
-      className="fixed right-6 top-4 z-40 rounded-full bg-white p-2 shadow-md"
+      className="relative shrink-0 rounded-full bg-white p-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FFC24B]"
     >
       <svg
         width="20"

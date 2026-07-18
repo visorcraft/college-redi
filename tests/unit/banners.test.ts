@@ -22,23 +22,46 @@ describe('buildBanners', () => {
     expect(banners).toEqual([]);
   });
 
-  it('surfaces failed channels from get_system_status checks', () => {
-    const status = { checks: { imap: { ok: false, error: 'Invalid credentials' }, ai: { ok: true } } };
+  it('surfaces failed channels from get_system_status', () => {
+    const status = {
+      imap: { configured: true, last_error: 'Invalid credentials' },
+      ai: { configured: true, reachable: true },
+    };
     const banners = buildBanners({ wizard_state: { skipped_steps: [] }, ui: {} }, status);
     expect(banners).toEqual([
       { id: 'channel:imap', text: 'College email login needs attention: Invalid credentials', href: '/settings/imap' },
     ]);
   });
 
-  it('falls back to imap.last_error when status has no checks, without duplicating', () => {
+  it('surfaces exhausted email and text deliveries', () => {
+    const banners = buildBanners(
+      { wizard_state: { skipped_steps: [] }, ui: {} },
+      {
+        smtp: {
+          configured: true,
+          last_delivery_error: 'A scheduled email failed after all retries.',
+        },
+        twilio: {
+          configured: true,
+          last_delivery_error: 'A scheduled text message failed after all retries.',
+        },
+      },
+    );
+    expect(banners.map((banner) => banner.id))
+      .toEqual(['channel:smtp', 'channel:twilio']);
+  });
+
+  it('falls back to imap.last_error when status is unavailable, without duplicating', () => {
     const settings = { wizard_state: { skipped_steps: [] }, ui: {}, imap: { last_error: 'AUTH failed' } };
     expect(buildBanners(settings, null).map((b) => b.id)).toEqual(['channel:imap']);
-    const withChecks = buildBanners(settings, { checks: { imap: { ok: false } } });
+    const withChecks = buildBanners(settings, {
+      imap: { configured: true, last_error: 'AUTH failed' },
+    });
     expect(withChecks.filter((b) => b.id === 'channel:imap')).toHaveLength(1);
   });
 
   it('tolerates any status shape without crashing', () => {
     expect(buildBanners({ wizard_state: { skipped_steps: [] }, ui: {} }, 'garbage')).toEqual([]);
-    expect(buildBanners({ wizard_state: { skipped_steps: [] }, ui: {} }, { checks: 'nope' })).toEqual([]);
+    expect(buildBanners({ wizard_state: { skipped_steps: [] }, ui: {} }, { ai: 'nope' })).toEqual([]);
   });
 });

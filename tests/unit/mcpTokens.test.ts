@@ -66,7 +66,10 @@ describe('mcp token tools', () => {
       `redi_${created.id}_${'A'.repeat(43)}`,
     )).toBeNull();
     expect(await verifyMcpToken(created.token))
-      .toEqual({ id: created.id, name: 'verify-me' });
+      .toEqual({
+        id: created.id,
+        name: 'verify-me',
+      });
     const { queryRows } = await import('../../src/server/db/sql');
     const rows = await queryRows<{ last_used_at: string | null }>(
       `SELECT last_used_at FROM mcp_tokens WHERE id = '${created.id}'`,

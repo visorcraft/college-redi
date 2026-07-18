@@ -1,9 +1,10 @@
 'use client';
 
 import { ImportFlow } from '@/components/degree/ImportFlow';
-import type { SettingsSnapshot } from '@/lib/schemas/settings';
+import type { DegreeImportDraft } from '@/lib/schemas/degree';
 
-export function DegreeImportSlot({ settings }: { settings: SettingsSnapshot }) {
-  void settings;
-  return <ImportFlow compact />;
+export function DegreeImportSlot({ onConfirmed }: {
+  onConfirmed: (programId: string, draft: DegreeImportDraft) => Promise<void>;
+}) {
+  return <ImportFlow compact onConfirmed={onConfirmed} />;
 }

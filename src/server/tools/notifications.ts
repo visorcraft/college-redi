@@ -6,8 +6,14 @@ import {
   scheduleNotificationParamsSchema,
 } from '../../lib/schemas/notifications';
 import { lit, sqlExec, sqlRows } from '../db/sql';
-import { enqueueNotification } from '../notify/engine';
-import { NotFoundError } from './errors';
+import {
+  enqueueNotification,
+  smtpConfigured,
+  twilioConfigured,
+} from '../notify/engine';
+import { getSecret } from '../secrets';
+import { getSettings } from '../settings';
+import { NotFoundError, ToolError } from './errors';
 import { defineTool, type Tool } from './registry';
 
 const IN_APP = `channels LIKE '%"in_app"%'`;
@@ -105,6 +111,29 @@ async function getHistory(raw: unknown) {
 
 async function scheduleNotification(raw: unknown) {
   const params = scheduleNotificationParamsSchema.parse(raw);
+  if (params.channels?.includes('email') || params.channels?.includes('sms')) {
+    const settings = await getSettings();
+    const [smtpPassword, twilioToken] = await Promise.all([
+      params.channels.includes('email') ? getSecret('smtp.password') : null,
+      params.channels.includes('sms') ? getSecret('twilio.auth_token') : null,
+    ]);
+    const unavailable = [
+      params.channels.includes('email')
+        && (!smtpConfigured(settings) || smtpPassword === null)
+        ? 'email'
+        : null,
+      params.channels.includes('sms')
+        && (!twilioConfigured(settings) || twilioToken === null)
+        ? 'SMS'
+        : null,
+    ].filter(Boolean);
+    if (unavailable.length > 0) {
+      throw new ToolError(
+        'bad_request',
+        `${unavailable.join(' and ')} delivery is not configured. Choose another channel or finish its settings.`,
+      );
+    }
+  }
   const id = await enqueueNotification({
     type: 'reminder',
     title: params.title,

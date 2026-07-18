@@ -6,10 +6,11 @@ import {
   useRef,
   useState,
 } from 'react';
+import { usePathname } from 'next/navigation';
 import { RediCloud } from './RediCloud';
 import { ChatBubble } from './ChatBubble';
 import { rediStatusLine } from './rediText';
-import { deriveRediState, type RediState } from './widgetState';
+import { deriveRediState } from './widgetState';
 
 interface StatusPayload {
   aiConfigured: boolean;
@@ -20,15 +21,14 @@ interface StatusPayload {
 const CELEBRATION_MS = 3_000;
 const POLL_MS = 30_000;
 
-const moodByState = {
-  sleepy: 'sleepy',
-  idle: 'idle',
-  thinking: 'idle',
-  alert: 'sad',
-  celebrating: 'happy',
-} as const satisfies Record<RediState, 'sleepy' | 'idle' | 'happy' | 'sad'>;
-
-export function RediWidget({ aiConfigured }: { aiConfigured: boolean }) {
+export function RediWidget({
+  aiConfigured,
+  pollStatus = true,
+}: {
+  aiConfigured: boolean;
+  pollStatus?: boolean;
+}) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<StatusPayload>({
     aiConfigured,
@@ -40,15 +40,17 @@ export function RediWidget({ aiConfigured }: { aiConfigured: boolean }) {
   const celebrationTimer = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!pollStatus) return;
     try {
       const response = await fetch('/api/redi/status', { cache: 'no-store' });
       if (response.ok) setStatus(await response.json() as StatusPayload);
     } catch {
       // Keep the last known status.
     }
-  }, []);
+  }, [pollStatus]);
 
   useEffect(() => {
+    if (!pollStatus) return;
     void refresh();
     const interval = window.setInterval(() => void refresh(), POLL_MS);
     const onFocus = () => void refresh();
@@ -57,7 +59,7 @@ export function RediWidget({ aiConfigured }: { aiConfigured: boolean }) {
       window.clearInterval(interval);
       window.removeEventListener('focus', onFocus);
     };
-  }, [refresh]);
+  }, [pollStatus, refresh]);
 
   useEffect(() => {
     const onCelebrate = () => {
@@ -83,6 +85,8 @@ export function RediWidget({ aiConfigured }: { aiConfigured: boolean }) {
   const state = deriveRediState(input);
   const statusLine = rediStatusLine(input);
 
+  if (pathname === '/login') return null;
+
   return (
     <>
       <button
@@ -95,7 +99,7 @@ export function RediWidget({ aiConfigured }: { aiConfigured: boolean }) {
         className="fixed bottom-6 right-6 z-50 rounded-full p-1 transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#FFC24B] motion-reduce:transition-none"
       >
         <span className="relative block" aria-hidden="true">
-          <RediCloud mood={moodByState[state]} size={64} />
+          <RediCloud state={state} size={64} />
           {state === 'alert' && status.unreadCount > 0 && (
             <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FFC24B] px-1 text-[11px] font-bold text-[#1F2D50]">
               {status.unreadCount > 99 ? '99+' : status.unreadCount}

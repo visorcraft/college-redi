@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  api, type CourseRow, type DegreeProgress, type PlannedJoined, type ProgramRow,
-  type RequirementRow, type TermRow,
+  api, type CompletedCourseRow, type CourseRow, type DegreeProgress,
+  type PlannedJoined, type ProgramRow, type RequirementRow, type TermRow,
 } from './api';
 import { ManualBuilder, ProgramForm } from './ManualBuilder';
 import { TermPlan } from './TermPlan';
@@ -85,32 +85,93 @@ export default function DegreeDashboard() {
   const [progress, setProgress] = useState<DegreeProgress | null>(null);
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [requirements, setRequirements] = useState<RequirementRow[]>([]);
+  const [completed, setCompleted] = useState<CompletedCourseRow[]>([]);
   const [terms, setTerms] = useState<TermRow[]>([]);
   const [planned, setPlanned] = useState<PlannedJoined[]>([]);
   const [startMode, setStartMode] = useState<'none' | 'manual' | 'import'>('none');
   const [error, setError] = useState<string | null>(null);
+  const [detailProgramId, setDetailProgramId] = useState<string | null>(null);
+  const detailRequest = useRef(0);
+  const selectedProgram = useRef<string | null>(null);
+  const selectionGeneration = useRef(0);
 
   const loadPrograms = useCallback(async () => {
-    const list = await api<ProgramRow[]>('/api/programs');
-    setPrograms(list);
-    setProgramId((cur) => cur ?? list[0]?.id ?? null);
+    return api<ProgramRow[]>('/api/programs');
   }, []);
 
   const loadDetail = useCallback(async (pid: string) => {
-    const [p, c, r, t, pl] = await Promise.all([
+    const request = ++detailRequest.current;
+    const detail = await Promise.all([
       api<DegreeProgress>(`/api/progress?program_id=${pid}`),
       api<CourseRow[]>(`/api/courses?program_id=${pid}`),
       api<RequirementRow[]>(`/api/requirements?program_id=${pid}`),
+      api<CompletedCourseRow[]>(`/api/completed-courses?program_id=${pid}`),
       api<TermRow[]>('/api/terms'),
       api<PlannedJoined[]>(`/api/planned-courses?program_id=${pid}`),
-    ]);
-    setProgress(p); setCourses(c); setRequirements(r); setTerms(t); setPlanned(pl);
+    ]).catch((error) => {
+      if (request === detailRequest.current) throw error;
+      return null;
+    });
+    if (!detail || request !== detailRequest.current) return;
+    const [p, c, r, done, t, pl] = detail;
+    setProgress(p); setCourses(c); setRequirements(r); setCompleted(done);
+    setTerms(t); setPlanned(pl);
+    setDetailProgramId(pid);
   }, []);
 
   const run = useCallback((fn: () => Promise<void>) => fn().catch((e) => setError(e instanceof Error ? e.message : String(e))), []);
-  useEffect(() => { run(async () => loadPrograms()); }, [loadPrograms, run]);
+  const chooseProgram = useCallback((id: string | null) => {
+    selectedProgram.current = id;
+    selectionGeneration.current += 1;
+    detailRequest.current += 1;
+    setDetailProgramId(null);
+    setProgramId(id);
+  }, []);
+  useEffect(() => {
+    run(async () => {
+      const list = await loadPrograms();
+      setPrograms(list);
+      setProgramId((current) => {
+        const next = list.some((program) => program.id === current)
+          ? current
+          : list[0]?.id ?? null;
+        selectedProgram.current = next;
+        return next;
+      });
+    });
+  }, [loadPrograms, run]);
   useEffect(() => { if (programId) run(async () => loadDetail(programId)); }, [programId, loadDetail, run]);
-  const refresh = useCallback(() => run(async () => { await loadPrograms(); if (programId) await loadDetail(programId); }), [loadPrograms, loadDetail, programId, run]);
+  const refresh = useCallback(() => run(async () => {
+    const selectedId = selectedProgram.current;
+    const generation = selectionGeneration.current;
+    const list = await loadPrograms();
+    if (generation !== selectionGeneration.current
+      || selectedId !== selectedProgram.current) return;
+    setPrograms(list);
+    const nextId = list.some((program) => program.id === selectedId)
+      ? selectedId
+      : list[0]?.id ?? null;
+    if (nextId === selectedId) {
+      if (nextId) await loadDetail(nextId);
+    } else {
+      chooseProgram(nextId);
+    }
+  }), [chooseProgram, loadPrograms, loadDetail, run]);
+  const openProgram = useCallback((id: string) => {
+    setStartMode('none');
+    chooseProgram(id);
+    const generation = selectionGeneration.current;
+    run(async () => {
+      const list = await loadPrograms();
+      if (generation === selectionGeneration.current
+        && selectedProgram.current === id) setPrograms(list);
+    });
+  }, [chooseProgram, loadPrograms, run]);
+  const programDeleted = useCallback((id: string) => {
+    const nextPrograms = programs?.filter((program) => program.id !== id) ?? [];
+    setPrograms(nextPrograms);
+    chooseProgram(nextPrograms[0]?.id ?? null);
+  }, [chooseProgram, programs]);
 
   if (error) return <p role="alert" className="rounded-xl bg-white p-4 text-[#B3261E]">{error}</p>;
   if (programs === null) return <p className="text-[#1F2D50]">Loading your degree…</p>;
@@ -127,33 +188,49 @@ export default function DegreeDashboard() {
     );
   }
   if (startMode === 'import') {
-    return <ImportFlow onConfirmed={() => { setStartMode('none'); refresh(); }} />;
+    return <ImportFlow onConfirmed={openProgram} />;
   }
-  if (programs.length === 0 && startMode === 'manual') {
-    return <ProgramForm onCreated={() => { setStartMode('none'); refresh(); }} />;
+  if (startMode === 'manual') {
+    return <ProgramForm onCreated={openProgram} />;
   }
 
+  const program = programs.find((item) => item.id === programId) ?? null;
+  const detailReady = detailProgramId === programId;
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <label className="text-sm font-medium text-[#1F2D50]">
           Program{' '}
-          <select aria-label="program" value={programId ?? ''} onChange={(e) => setProgramId(e.target.value)} className="rounded-lg border border-[#C9DAEC] bg-white p-2">
+          <select aria-label="program" value={programId ?? ''} onChange={(e) => chooseProgram(e.target.value)} className="rounded-lg border border-[#C9DAEC] bg-white p-2">
             {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </label>
-        <button onClick={() => setStartMode('import')} className="rounded-xl bg-white px-3 py-2 text-sm font-medium text-[#1F2D50] shadow-sm">Import another audit</button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setStartMode('manual')} className="rounded-xl bg-white px-3 py-2 text-sm font-medium text-[#1F2D50] shadow-sm">Add program</button>
+          <button onClick={() => setStartMode('import')} className="rounded-xl bg-white px-3 py-2 text-sm font-medium text-[#1F2D50] shadow-sm">Import another audit</button>
+        </div>
       </div>
-      {progress && <ProgressRing progress={progress} />}
-      {progress && progress.risk_flags.length > 0 && (
+      {programId && !detailReady && <p role="status" className="text-sm text-[#5A6B8C]">Loading program…</p>}
+      {detailReady && progress && <ProgressRing progress={progress} />}
+      {detailReady && progress && progress.risk_flags.length > 0 && (
         <div role="alert" className="rounded-2xl bg-[#FFF4D6] p-4 text-sm text-[#1F2D50]">
           <p className="mb-1 font-semibold">Heads up ⛅</p>
           <ul className="list-inside list-disc">{progress.risk_flags.map((f, i) => <li key={i}>{f.message}</li>)}</ul>
         </div>
       )}
-      {progress && <RequirementGroups requirements={requirements} progress={progress} />}
-      {programId && <ManualBuilder programId={programId} courses={courses} onChanged={refresh} />}
-      {programId && <TermPlan programId={programId} courses={courses} terms={terms} planned={planned} onChanged={refresh} />}
+      {detailReady && progress && <RequirementGroups requirements={requirements} progress={progress} />}
+      {detailReady && program && (
+        <ManualBuilder
+          key={program.id}
+          program={program}
+          courses={courses}
+          requirements={requirements}
+          completed={completed}
+          onChanged={refresh}
+          onProgramDeleted={programDeleted}
+        />
+      )}
+      {detailReady && programId && <TermPlan programId={programId} courses={courses} terms={terms} planned={planned} onChanged={refresh} />}
     </div>
   );
 }

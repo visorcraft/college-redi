@@ -22,6 +22,7 @@ interface HistoryItem {
   attempt: number;
   sent_at: string;
   notification_title: string | null;
+  provider_response: unknown;
 }
 
 const linkFor = (item: Item) =>
@@ -35,6 +36,7 @@ export default function NotificationsPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [tab, setTab] = useState<'inbox' | 'history'>('inbox');
+  const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [notifications, sentHistory] = await Promise.all([
@@ -62,6 +64,35 @@ export default function NotificationsPage() {
     });
     await load();
   };
+  const schedule = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const channels = data.getAll('channels').map(String);
+    if (channels.length === 0) {
+      setScheduleMessage('Choose at least one delivery channel.');
+      return;
+    }
+    const response = await fetch('/api/notifications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify({
+        title: String(data.get('title') ?? ''),
+        body: String(data.get('body') ?? ''),
+        scheduled_for: new Date(String(data.get('scheduled_for'))).toISOString(),
+        importance: String(data.get('importance') ?? 'normal'),
+        channels,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setScheduleMessage(result?.error?.message ?? 'Could not schedule reminder.');
+      return;
+    }
+    form.reset();
+    setScheduleMessage('Reminder scheduled.');
+    await load();
+  };
   const tabClass = (active: boolean) =>
     `rounded-xl px-3 py-1 text-sm ${active
       ? 'bg-[#1F2D50] text-white'
@@ -87,6 +118,46 @@ export default function NotificationsPage() {
           </button>
         </div>
       </div>
+
+      <section aria-labelledby="schedule-reminder" className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
+        <h2 id="schedule-reminder" className="font-semibold text-[#1F2D50]">Schedule a reminder</h2>
+        <form onSubmit={schedule} className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="text-sm text-[#1F2D50]">
+            Title
+            <input name="title" required maxLength={300} className="mt-1 w-full rounded-xl border border-[#1F2D50]/20 px-3 py-2" />
+          </label>
+          <label className="text-sm text-[#1F2D50]">
+            When
+            <input name="scheduled_for" required type="datetime-local" className="mt-1 w-full rounded-xl border border-[#1F2D50]/20 px-3 py-2" />
+          </label>
+          <label className="text-sm text-[#1F2D50] sm:col-span-2">
+            Message
+            <textarea name="body" required maxLength={8000} rows={2} className="mt-1 w-full rounded-xl border border-[#1F2D50]/20 px-3 py-2" />
+          </label>
+          <label className="text-sm text-[#1F2D50]">
+            Importance
+            <select name="importance" defaultValue="normal" className="mt-1 w-full rounded-xl border border-[#1F2D50]/20 px-3 py-2">
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </label>
+          <fieldset className="text-sm text-[#1F2D50]">
+            <legend>Send through</legend>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <label className="flex items-center gap-1"><input type="checkbox" name="channels" value="in_app" defaultChecked /> In app</label>
+              <label className="flex items-center gap-1"><input type="checkbox" name="channels" value="email" /> Email</label>
+              <label className="flex items-center gap-1"><input type="checkbox" name="channels" value="sms" /> SMS</label>
+            </div>
+          </fieldset>
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <button type="submit" className="rounded-xl bg-[#1F2D50] px-4 py-2 text-sm font-semibold text-white">
+              Schedule reminder
+            </button>
+            {scheduleMessage && <p role="status" className="text-sm text-[#1F2D50]/70">{scheduleMessage}</p>}
+          </div>
+        </form>
+      </section>
 
       {tab === 'inbox' ? (
         <ul className="mt-4 space-y-2" aria-label="Notifications">
@@ -127,6 +198,13 @@ export default function NotificationsPage() {
                 to {item.destination} · {item.status} · attempt {item.attempt} ·{' '}
                 {formatTime(item.sent_at)}
               </p>
+              {item.status === 'failed' && item.provider_response !== null && (
+                <p className="mt-1 break-words text-xs text-red-700">
+                  Provider detail: {typeof item.provider_response === 'string'
+                    ? item.provider_response
+                    : JSON.stringify(item.provider_response)}
+                </p>
+              )}
             </li>
           ))}
           {history.length === 0 && (

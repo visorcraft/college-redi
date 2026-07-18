@@ -34,10 +34,10 @@ describe('auth flow (booted app, temp data dir)', () => {
     expect(await res.json()).toEqual({ ok: true });
   });
 
-  it('GET / redirects to /login without a session', async () => {
+  it('GET / redirects a fresh install to /wizard', async () => {
     const res = await fetch(`${srv.baseUrl}/`, { redirect: 'manual' });
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toContain('/login');
+    expect(res.headers.get('location')).toContain('/wizard');
   });
 
   it('GET /api/settings is 401 without a session', async () => {
@@ -118,10 +118,28 @@ describe('auth flow (booted app, temp data dir)', () => {
     expect(status.scheduler).toMatchObject({ enabled: false });
   });
 
+  it('GET /api/dashboard returns the dashboard composite', async () => {
+    const res = await fetch(`${srv.baseUrl}/api/dashboard`, {
+      headers: { cookie: cookieHeader(jar) },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      today: { overdue: [], due_today: [] },
+      progress: null,
+      banners: expect.any(Array),
+    });
+  });
+
   it('logout clears the session; login with the wrong password is 401', async () => {
     const out = await fetch(`${srv.baseUrl}/api/auth/logout`, { method: 'POST', headers: { cookie: cookieHeader(jar) }, redirect: 'manual' });
     expect(out.status).toBe(303);
     jarFrom(out, jar);
+    const root = await fetch(`${srv.baseUrl}/`, {
+      headers: { cookie: cookieHeader(jar) },
+      redirect: 'manual',
+    });
+    expect(root.status).toBe(307);
+    expect(root.headers.get('location')).toContain('/login');
     const guarded = await fetch(`${srv.baseUrl}/api/settings`, { headers: { cookie: cookieHeader(jar) } });
     expect(guarded.status).toBe(401);
     const bad = await fetch(`${srv.baseUrl}/api/auth/login`, {

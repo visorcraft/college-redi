@@ -6,7 +6,11 @@ export const dynamic = 'force-dynamic';
 export default async function StatusSettingsPage() {
   let status: Record<string, unknown>;
   try {
-    status = (await callTool('get_system_status', {}, { actor: 'user' })) as Record<string, unknown>;
+    status = (await callTool(
+      'get_system_status',
+      { probe_connections: true },
+      { actor: 'user' },
+    )) as Record<string, unknown>;
   } catch (err) {
     status = { error: err instanceof Error ? err.message : String(err) };
   }

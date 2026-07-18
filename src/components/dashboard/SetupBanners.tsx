@@ -8,7 +8,11 @@ export default async function SetupBanners() {
   const settings = (await getSettings()) as unknown as SettingsSnapshot;
   let status: unknown = null;
   try {
-    status = await callTool('get_system_status', {}, { actor: 'user' });
+    status = await callTool(
+      'get_system_status',
+      { probe_connections: false, probe_ai: true },
+      { actor: 'user' },
+    );
   } catch {
     status = null; // status tool unavailable — banners still work from settings alone
   }

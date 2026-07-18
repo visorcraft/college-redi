@@ -8,14 +8,15 @@ import type { SecretFlags } from '../WizardShell';
 export function DoneStep({ settings, secretFlags, onFinish, busy }: {
   settings: SettingsSnapshot; secretFlags: SecretFlags; onFinish: () => Promise<void>; busy: boolean;
 }) {
+  const skipped = new Set(settings.wizard_state?.skipped_steps ?? []);
   const rows = [
-    { id: 'ai', label: 'AI brain', ok: secretFlags.aiKey && Boolean(settings.ai?.model), href: '/settings/ai' },
-    { id: 'imap', label: 'College email', ok: Boolean(settings.imap?.host) && secretFlags.imapPassword, href: '/settings/imap' },
-    { id: 'smtp', label: 'Personal email', ok: Boolean(settings.smtp?.host) && secretFlags.smtpPassword, href: '/settings/smtp' },
-    { id: 'twilio', label: 'Text messages', ok: Boolean(settings.twilio?.account_sid) && secretFlags.twilioToken, href: '/settings/twilio' },
-    { id: 'degree', label: 'Your degree', ok: Boolean(settings.degree_profile?.program), href: '/degree' },
-    { id: 'checklist', label: 'Starting checklist', ok: (settings.wizard_state?.pending_checklist?.length ?? 0) > 0, href: '/tasks' },
-    { id: 'notifications', label: 'Notification style', ok: Boolean(settings.notification_prefs), href: '/settings/notifications' },
+    { id: 'ai', label: 'AI brain', ok: !skipped.has('ai') && secretFlags.aiKey && Boolean(settings.ai?.model), href: '/settings/ai' },
+    { id: 'imap', label: 'College email', ok: !skipped.has('imap') && Boolean(settings.imap?.host) && secretFlags.imapPassword, href: '/settings/imap' },
+    { id: 'smtp', label: 'Personal email', ok: !skipped.has('smtp') && Boolean(settings.smtp?.host) && secretFlags.smtpPassword, href: '/settings/smtp' },
+    { id: 'twilio', label: 'Text messages', ok: !skipped.has('twilio') && Boolean(settings.twilio?.account_sid) && secretFlags.twilioToken, href: '/settings/twilio' },
+    { id: 'degree', label: 'Your degree', ok: !skipped.has('degree') && Boolean(settings.degree_profile?.program), href: '/degree' },
+    { id: 'checklist', label: 'Starting checklist', ok: !skipped.has('checklist') && (settings.wizard_state?.pending_checklist?.length ?? 0) > 0, href: '/tasks' },
+    { id: 'notifications', label: 'Notification style', ok: !skipped.has('notifications') && Boolean(settings.notification_prefs), href: '/settings/notifications' },
   ];
 
   return (

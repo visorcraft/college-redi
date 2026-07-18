@@ -53,7 +53,7 @@ describe('remote migrations', () => {
     ]);
   });
 
-  it('creates constraint-aware tables, applies 0002 read_at once, and records versions', async () => {
+  it('creates the current constraint-aware schema and records both versions', async () => {
     const tables = new Set<string>();
     const descriptors = new Map<string, ReturnType<typeof descriptor>>();
     const versions = new Set<number>();
@@ -99,7 +99,7 @@ describe('remote migrations', () => {
 
     await runMigrations(remote);
     expect(versions).toEqual(new Set([1, 2]));
-    expect(alterCount).toBe(1);
+    expect(alterCount).toBe(0);
     expect(tables).toEqual(new Set([
       '__redi_schema_migrations',
       ...schema.tablesList().map((table) => table.name),
@@ -112,7 +112,7 @@ describe('remote migrations', () => {
     ).toHaveLength(1);
 
     await runMigrations(remote);
-    expect(alterCount).toBe(1);
+    expect(alterCount).toBe(0);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(
       schema.tablesList().length,
     );
