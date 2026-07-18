@@ -32,10 +32,10 @@ export async function markCollegeEmailDigestItemsIncluded(
 export function renderCollegeEmailDigestSection(items: CollegeEmailDigestItem[]): string {
   if (items.length === 0) return '';
   const lines = [
-    `📬 College inbox — ${items.length} informational email${items.length === 1 ? '' : 's'}:`,
+    `📬 College inbox - ${items.length} informational email${items.length === 1 ? '' : 's'}:`,
   ];
   for (const item of items) {
-    lines.push(`• ${item.subject} — ${item.summary ?? '(no summary)'}`);
+    lines.push(`• ${item.subject} - ${item.summary ?? '(no summary)'}`);
   }
   return lines.join('\n');
 }

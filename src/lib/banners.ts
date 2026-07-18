@@ -2,13 +2,13 @@ export interface Banner { id: string; text: string; href: string }
 
 // One-line, friendly, one-click fix (spec §5.2: banners, never modals).
 export const SKIPPED_STEP_BANNERS: Record<string, { text: string; href: string }> = {
-  ai: { text: 'Redi is sleepy — add your AI key so he can think and chat.', href: '/settings/ai' },
-  imap: { text: 'College email is not connected — Redi cannot watch your inbox yet.', href: '/settings/imap' },
-  smtp: { text: 'Personal email is not set up — summaries have nowhere to go.', href: '/settings/smtp' },
-  twilio: { text: 'Text messages are off — optional, but handy for urgent nudges.', href: '/settings/twilio' },
-  degree: { text: 'Your degree plan is empty — import your audit or add courses.', href: '/degree' },
-  checklist: { text: 'No starting checklist — add the paperwork you still owe.', href: '/tasks' },
-  notifications: { text: 'Notification style is not set — quiet hours and digest live here.', href: '/settings/notifications' },
+  ai: { text: 'Redi is sleepy - add your AI key so he can think and chat.', href: '/settings/ai' },
+  imap: { text: 'College email is not connected - Redi cannot watch your inbox yet.', href: '/settings/imap' },
+  smtp: { text: 'Personal email is not set up - summaries have nowhere to go.', href: '/settings/smtp' },
+  twilio: { text: 'Text messages are off - optional, but handy for urgent nudges.', href: '/settings/twilio' },
+  degree: { text: 'Your degree plan is empty - import your audit or add courses.', href: '/degree' },
+  checklist: { text: 'No starting checklist - add the paperwork you still owe.', href: '/tasks' },
+  notifications: { text: 'Notification style is not set - quiet hours and digest live here.', href: '/settings/notifications' },
 };
 
 const CHANNEL_BANNERS: Record<string, { label: string; href: string }> = {

@@ -7,11 +7,11 @@
 #
 # MongrelDB binds 127.0.0.1 only, so host networking is required on Linux.
 # Run exactly one MongrelDB container per data directory. Never expose :8453
-# to untrusted networks or downgrade against an existing WAL v4 data directory.
+# to untrusted networks or downgrade against an existing data directory.
 
 services:
   mongreldb:
-    image: ghcr.io/visorcraft/mongreldb-server:v0.59.0
+    image: ghcr.io/visorcraft/mongreldb-server:v0.60.0
     network_mode: host
     env_file: ./redi-data/.env
     command: ["/data", "--port", "8453", "--auth-users", "--passphrase", "${MONGRELDB_PASSPHRASE}"]
@@ -40,7 +40,7 @@ services:
 # not 0.0.0.0:8453, because the daemon already owns 127.0.0.1:8453.
 #
 #   mongreldb:
-#     image: ghcr.io/visorcraft/mongreldb-server:v0.59.0
+#     image: ghcr.io/visorcraft/mongreldb-server:v0.60.0
 #     env_file: ./redi-data/.env
 #     command: ["/data", "--port", "8453", "--auth-users", "--passphrase", "${MONGRELDB_PASSPHRASE}"]
 #     volumes:

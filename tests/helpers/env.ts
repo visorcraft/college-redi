@@ -53,7 +53,7 @@ export async function resetServerState(): Promise<void> {
       const fn = mod[exportName];
       if (typeof fn === 'function') (fn as () => void)();
     } catch {
-      // module not created yet in this phase — nothing to reset
+      // module not created yet in this phase - nothing to reset
     }
   }
 }

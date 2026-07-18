@@ -1,4 +1,4 @@
-# ── Superpowers workflow artifacts (specs, plans — local only, never committed)
+# ── Superpowers workflow artifacts (specs, plans - local only, never committed)
 docs/superpowers/
 
 # ── Dependencies
@@ -13,7 +13,7 @@ build/
 dist/
 *.tsbuildinfo
 
-# ── Environment & secrets — NEVER commit
+# ── Environment & secrets - NEVER commit
 .env
 .env.*
 !.env.example

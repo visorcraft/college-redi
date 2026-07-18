@@ -60,12 +60,12 @@ export function RequirementGroups({ requirements, progress }: { requirements: Re
                   {r.type === 'credit_bucket' && <span>{p?.credits_satisfied ?? 0} / {r.credits_required} credits</span>}
                   {r.type === 'gpa' && <span>GPA requirement{p?.satisfied ? ' met' : ''}</span>}
                   {r.type === 'milestone' && <span>{r.description || 'Milestone'} (tracked manually)</span>}
-                  {r.description && r.type !== 'milestone' && <span className="text-[#5A6B8C]"> — {r.description}</span>}
+                  {r.description && r.type !== 'milestone' && <span className="text-[#5A6B8C]"> - {r.description}</span>}
                   {p && p.satisfied_by.length > 0 && (
                     <details className="ml-6 text-xs text-[#5A6B8C]">
                       <summary>satisfied by</summary>
                       <ul>{p.satisfied_by.map((s, i) => (
-                        <li key={i}>{s.course_code} — {s.term} {s.year}{s.grade ? `, ${s.grade}` : ''} ({s.credits} cr{s.status !== 'completed' ? `, ${s.status}` : ''})</li>
+                        <li key={i}>{s.course_code} - {s.term} {s.year}{s.grade ? `, ${s.grade}` : ''} ({s.credits} cr{s.status !== 'completed' ? `, ${s.status}` : ''})</li>
                       ))}</ul>
                     </details>
                   )}

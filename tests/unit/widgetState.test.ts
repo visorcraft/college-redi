@@ -12,7 +12,7 @@ describe('widgetState', () => {
   });
 
   it('has a one-line tooltip per state (spec §6.7)', () => {
-    expect(getTooltip('sleepy')).toBe('Redi is sleepy — add your AI key to wake him up');
+    expect(getTooltip('sleepy')).toBe('Redi is sleepy - add your AI key to wake him up');
     expect(getTooltip('idle')).toBe('Redi is here if you need him');
   });
 });

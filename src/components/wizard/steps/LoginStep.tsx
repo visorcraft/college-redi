@@ -16,7 +16,7 @@ export function LoginStep({ hasPassword, onComplete, busy }: {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-xl font-semibold text-[#1F2D50]">Your login</h1>
-        <p className="text-sm text-[#1F2D50]">Your password is already set — you&apos;re good.</p>
+        <p className="text-sm text-[#1F2D50]">Your password is already set - you&apos;re good.</p>
         <PrimaryButton onClick={() => onComplete()} disabled={busy}>Continue</PrimaryButton>
       </div>
     );
@@ -25,7 +25,7 @@ export function LoginStep({ hasPassword, onComplete, busy }: {
   async function save() {
     setError(null);
     if (pw1.length < 8) { setError('Use at least 8 characters.'); return; }
-    if (pw1 !== pw2) { setError("Those don't match — try again."); return; }
+    if (pw1 !== pw2) { setError("Those don't match - try again."); return; }
     try {
       await apiFetch('/api/auth/setup', {
         method: 'POST',

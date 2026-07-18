@@ -108,7 +108,7 @@ export function rateLimitResponse(): NextResponse {
     {
       error: {
         code: 'rate_limited',
-        message: 'Too many requests — slow down.',
+        message: 'Too many requests - slow down.',
       },
     },
     { status: 429 },

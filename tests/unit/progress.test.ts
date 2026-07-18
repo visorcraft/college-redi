@@ -32,7 +32,7 @@ const input = (parts: Partial<ProgressInput>): ProgressInput => ({
   program: program(), requirements: [], courses: [], completed: [], planned: [], terms: [], ...parts,
 });
 
-describe('evaluateDegreeProgress — requirement satisfaction', () => {
+describe('evaluateDegreeProgress - requirement satisfaction', () => {
   it('course requirement satisfied only when grade meets min_grade', () => {
     const c = course('CS 101');
     const r = req({ type: 'course', course_id: c.id, min_grade: 'B' });
@@ -112,7 +112,7 @@ describe('evaluateDegreeProgress — requirement satisfaction', () => {
   });
 });
 
-describe('evaluateDegreeProgress — projection and risk', () => {
+describe('evaluateDegreeProgress - projection and risk', () => {
   it('projects the first term where all requirements become coverable', () => {
     const c1 = course('CS 101');
     const c2 = course('CS 201');

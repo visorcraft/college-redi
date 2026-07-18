@@ -26,7 +26,7 @@ export function DoneStep({ settings, secretFlags, onFinish, busy }: {
         {rows.map((r) => (
           <li key={r.id} className="flex items-center justify-between gap-3 text-sm">
             <span className="text-[#1F2D50]">
-              <span aria-hidden="true" className={r.ok ? 'text-emerald-700' : 'text-[#1F2D50]/40'}>{r.ok ? '✓' : '—'}</span>{' '}
+              <span aria-hidden="true" className={r.ok ? 'text-emerald-700' : 'text-[#1F2D50]/40'}>{r.ok ? '✓' : '-'}</span>{' '}
               {r.label}
               <span className="sr-only">{r.ok ? ' set up' : ' not set up'}</span>
             </span>
@@ -34,7 +34,7 @@ export function DoneStep({ settings, secretFlags, onFinish, busy }: {
           </li>
         ))}
       </ul>
-      <p className="text-sm text-[#1F2D50]/70">Anything marked &quot;not set up&quot; gets a gentle reminder banner on your dashboard — never a modal.</p>
+      <p className="text-sm text-[#1F2D50]/70">Anything marked &quot;not set up&quot; gets a gentle reminder banner on your dashboard - never a modal.</p>
       <PrimaryButton onClick={onFinish} disabled={busy}>Take me to my dashboard</PrimaryButton>
     </div>
   );

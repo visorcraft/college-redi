@@ -347,7 +347,7 @@ export async function runEmailPipeline(deps: PipelineDeps = {}): Promise<Pipelin
       continue;
     }
     if (rule?.action === 'important') {
-      const summary = `Important sender — ${message.subject}`;
+      const summary = `Important sender - ${message.subject}`;
       const persisted = await recordTriageResult({
         id: existing?.id ?? null,
         mailbox,

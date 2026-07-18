@@ -26,7 +26,7 @@ export const PROVIDERS: readonly ProviderPreset[] = [
     id: 'yahoo', label: 'Yahoo',
     imap: { host: 'imap.mail.yahoo.com', port: 993 },
     smtp: { host: 'smtp.mail.yahoo.com', port: 465, security: 'tls' },
-    passwordNote: 'An app password is required — your normal password will not work.',
+    passwordNote: 'An app password is required - your normal password will not work.',
     helpUrl: 'https://login.yahoo.com/account/security',
   },
   {
@@ -40,7 +40,7 @@ export const PROVIDERS: readonly ProviderPreset[] = [
     id: 'other', label: 'Other / school',
     imap: { host: '', port: 993 },
     smtp: { host: '', port: 587, security: 'starttls' },
-    passwordNote: 'School SSO portals often document "IMAP/SMTP access" separately — check your IT page for host names and app passwords.',
+    passwordNote: 'School SSO portals often document "IMAP/SMTP access" separately - check your IT page for host names and app passwords.',
     helpUrl: null,
   },
 ];

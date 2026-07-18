@@ -296,7 +296,7 @@ export async function loadProgressInput(programId?: string): Promise<ProgressInp
     ? await sqlOne<ProgramRow>(`SELECT ${PROGRAM_COLS} FROM degree_programs WHERE id = ${lit(programId)}`)
     : await sqlOne<ProgramRow>(`SELECT ${PROGRAM_COLS} FROM degree_programs WHERE status = 'active' ORDER BY created_at LIMIT 1`);
   if (!program) {
-    throw new NotFoundError(programId ? `degree program ${programId} not found` : 'no active degree program yet — create or import one first');
+    throw new NotFoundError(programId ? `degree program ${programId} not found` : 'no active degree program yet - create or import one first');
   }
   const [requirements, courseRows, completed, planned, terms] = await Promise.all([
     sqlAll(`SELECT ${REQUIREMENT_COLS} FROM requirements WHERE program_id = ${lit(program.id)} ORDER BY sort_order, group_name`),

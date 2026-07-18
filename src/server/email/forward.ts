@@ -40,8 +40,8 @@ export async function forwardActionableSummary(
       lines.push(
         `• ${event.title}${
           event.due_at
-            ? ` — due ${formatInTimezone(event.due_at, timezone)}`
-            : ' — date needs your confirmation'
+            ? ` - due ${formatInTimezone(event.due_at, timezone)}`
+            : ' - date needs your confirmation'
         }`,
       );
     }

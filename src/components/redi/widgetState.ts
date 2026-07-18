@@ -2,7 +2,7 @@
 export type RediState = 'sleepy' | 'idle' | 'thinking' | 'alert' | 'celebrating';
 export type WidgetState = RediState;
 
-// Spec §6.6 sleepy-gate message — verbatim.
+// Spec §6.6 sleepy-gate message - verbatim.
 export const SLEEPY_MESSAGE = 'Redi can talk to you once you add your AI credentials and pick a model';
 
 export interface RediStatusInput {
@@ -33,9 +33,9 @@ export function getWidgetState(input: { aiConfigured: boolean }): WidgetState {
 }
 
 export function getTooltip(state: WidgetState): string {
-  if (state === 'sleepy') return 'Redi is sleepy — add your AI key to wake him up';
+  if (state === 'sleepy') return 'Redi is sleepy - add your AI key to wake him up';
   if (state === 'thinking') return 'Redi is thinking…';
   if (state === 'alert') return 'You have unread updates';
-  if (state === 'celebrating') return 'Nice — one more thing done!';
+  if (state === 'celebrating') return 'Nice - one more thing done!';
   return 'Redi is here if you need him';
 }

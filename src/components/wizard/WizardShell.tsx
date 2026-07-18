@@ -116,7 +116,7 @@ export function WizardShell({ initialSettings, hasPassword, secretFlags }: {
         {step.id === 'done' && <DoneStep settings={settings} secretFlags={secretFlags} onFinish={onFinish} busy={busy} />}
       </div>
       <div className="flex w-full items-center justify-between pr-20 text-sm text-[#1F2D50]/70 sm:pr-0">
-        <span>Step {stepN} of 10 — {step.title}</span>
+        <span>Step {stepN} of 10 - {step.title}</span>
         <span className="flex items-center gap-4">
           {onBack && <button type="button" onClick={onBack} disabled={busy} className="underline">Back</button>}
           {onSkip && <button type="button" onClick={onSkip} disabled={busy} className="underline">Skip for now</button>}

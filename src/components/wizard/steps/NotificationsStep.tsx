@@ -68,7 +68,7 @@ export function NotificationsStep({ settings, onComplete = async () => {}, busy 
         <TextField label="Quiet hours end" value={quietEnd} onChange={setQuietEnd} type="time" />
       </div>
       <p className="text-xs text-[#1F2D50]/60">During quiet hours I hold non-urgent messages. Urgent ones (like a registration window opening) still come through.</p>
-      <TextField label="Timezone" value={timezone} onChange={setTimezone} hint="Auto-detected from your browser — edit if it looks wrong." />
+      <TextField label="Timezone" value={timezone} onChange={setTimezone} hint="Auto-detected from your browser - edit if it looks wrong." />
       <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>
     </div>
   );

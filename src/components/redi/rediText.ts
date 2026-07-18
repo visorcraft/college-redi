@@ -26,7 +26,7 @@ export function rediStatusLine(status: RediStatusInput): string {
   if (!status.aiConfigured) {
     return 'Redi can talk to you once you add your AI credentials and pick a model';
   }
-  if (status.celebrating) return 'Nice — one more thing done!';
+  if (status.celebrating) return 'Nice - one more thing done!';
   if (status.chatBusy || status.jobRunning) return 'Redi is thinking…';
   if (status.unreadCount > 0) {
     return `${status.unreadCount} thing${status.unreadCount === 1 ? '' : 's'} need${

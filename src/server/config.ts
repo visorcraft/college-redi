@@ -47,7 +47,7 @@ export interface DbCredentials {
 export function requireDbCredentials(cfg: AppConfig = getConfig()): DbCredentials {
   if (!cfg.MONGRELDB_DB_PASSWORD || !cfg.MONGRELDB_PASSPHRASE) {
     throw new Error(
-      'MongrelDB credentials are missing. Run `sh scripts/bootstrap-env.sh` first — it generates ' +
+      'MongrelDB credentials are missing. Run `sh scripts/bootstrap-env.sh` first - it generates ' +
         'MONGRELDB_DB_PASSWORD and MONGRELDB_PASSPHRASE into $DATA_DIR/.env (spec §4.6).',
     );
   }

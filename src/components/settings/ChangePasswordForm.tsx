@@ -13,7 +13,7 @@ export function ChangePasswordForm() {
   async function save() {
     setStatus(null);
     if (next.length < 8) { setStatus({ ok: false, text: 'Use at least 8 characters.' }); return; }
-    if (next !== confirm) { setStatus({ ok: false, text: "Those don't match — try again." }); return; }
+    if (next !== confirm) { setStatus({ ok: false, text: "Those don't match - try again." }); return; }
     try {
       await apiFetch('/api/auth/change-password', {
         method: 'POST',

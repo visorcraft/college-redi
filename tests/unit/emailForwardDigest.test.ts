@@ -71,7 +71,7 @@ describe('forwardActionableSummary', () => {
     await forward.forwardActionableSummary(
       {
         id: 'em2',
-        subject: 'Important sender — Tuition',
+        subject: 'Important sender - Tuition',
         from_addr: 'bursar@stateu.edu',
         summary: null,
       },
@@ -80,7 +80,7 @@ describe('forwardActionableSummary', () => {
       new Date(),
     );
     expect(engineMock.enqueueNotification.mock.calls[0][0].title)
-      .toBe('☁️ Redi: Important sender — Tuition');
+      .toBe('☁️ Redi: Important sender - Tuition');
   });
 });
 
@@ -132,7 +132,7 @@ describe('college email digest', () => {
     const items = await digest.collectCollegeEmailDigestItems();
     expect(items.map((item) => item.subject)).toEqual(['Summer hours']);
     expect(digest.renderCollegeEmailDigestSection(items))
-      .toContain('Summer hours — Library open 8-6.');
+      .toContain('Summer hours - Library open 8-6.');
     await store.insertProcessedEmail({
       mailbox: 'INBOX',
       uid: 4,

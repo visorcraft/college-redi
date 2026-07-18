@@ -66,12 +66,12 @@ describe('buildDashboardLine', () => {
       if (name === 'list_tasks') return { tasks: [] };
       return { notifications: [] };
     });
-    expect((await buildDashboardLine()).line).toBe('All clear — nothing due today ☀️');
+    expect((await buildDashboardLine()).line).toBe('All clear - nothing due today ☀️');
   });
 
   it('never throws when tools fail', async () => {
     const { buildDashboardLine, callTool } = await subject();
     callTool.mockRejectedValue(new Error('registry down'));
-    expect((await buildDashboardLine()).line).toBe('All clear — nothing due today ☀️');
+    expect((await buildDashboardLine()).line).toBe('All clear - nothing due today ☀️');
   });
 });

@@ -113,7 +113,7 @@ export function ImportFlow({ compact = false, onConfirmed }: {
   if (phase.kind === 'confirming') return <p className="text-[#1F2D50]">Saving your degree plan… ☁️</p>;
   if (phase.kind === 'done') return (
     <div className="space-y-2 rounded-xl bg-white p-4 text-[#1F2D50]">
-      <p>Imported — your degree plan is ready 🎉</p>
+      <p>Imported - your degree plan is ready 🎉</p>
       {phase.error && (
         <>
           <p role="alert" className="text-sm text-[#B3261E]">{phase.error}</p>
@@ -302,7 +302,7 @@ export function ImportFlow({ compact = false, onConfirmed }: {
           </div>
         )}
         <div className="flex gap-3">
-          <button onClick={() => confirm(draft)} className="rounded-xl bg-[#1F2D50] px-4 py-2 font-medium text-white">Looks right — import</button>
+          <button onClick={() => confirm(draft)} className="rounded-xl bg-[#1F2D50] px-4 py-2 font-medium text-white">Looks right - import</button>
           <button onClick={() => { setRangeInputs({}); setPhase({ kind: 'input' }); }} className="rounded-xl bg-[#EAF3FB] px-4 py-2 font-medium text-[#1F2D50]">Start over</button>
         </div>
       </section>

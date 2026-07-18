@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   const hash = await getSecret('login.password_hash');
   if (!hash) {
     return NextResponse.json(
-      { error: { code: 'no_password', message: 'No password is set yet — finish the wizard first.' } },
+      { error: { code: 'no_password', message: 'No password is set yet - finish the wizard first.' } },
       { status: 400 },
     );
   }

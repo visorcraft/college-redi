@@ -66,13 +66,13 @@ export async function buildDashboardLine(): Promise<{
 
   if (!aiOk) {
     return {
-      line: 'My AI brain is offline — chat is sleepy, but everything else keeps working.',
+      line: 'My AI brain is offline - chat is sleepy, but everything else keeps working.',
       unreadCount,
     };
   }
   if (dueToday > 0) {
     return {
-      line: `You have ${dueToday} thing${dueToday === 1 ? '' : 's'} due today — you've got this ⛅`,
+      line: `You have ${dueToday} thing${dueToday === 1 ? '' : 's'} due today - you've got this ⛅`,
       unreadCount,
     };
   }
@@ -82,5 +82,5 @@ export async function buildDashboardLine(): Promise<{
       unreadCount,
     };
   }
-  return { line: 'All clear — nothing due today ☀️', unreadCount };
+  return { line: 'All clear - nothing due today ☀️', unreadCount };
 }

@@ -452,7 +452,7 @@ export function ManualBuilder({
         {reqType === 'course' && (
           <label className="text-sm text-[#1F2D50]">Course
             <select aria-label="requirement course" name="course_id" required className={inputCls + ' mt-1 block'}>
-              <option value="">— pick —</option>
+              <option value="">- pick -</option>
               {courses.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
             </select>
           </label>

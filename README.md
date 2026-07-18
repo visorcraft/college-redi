@@ -102,12 +102,12 @@ Settings and the wizard handle normal configuration. Environment variables may p
 | `MONGRELDB_DB_USERNAME` | `redi` | DB catalog user; auto-generated into `$DATA_DIR/.env` on first boot (§4.6); env overrides file |
 | `MONGRELDB_DB_PASSWORD` | *(generated)* | DB user password; 32-byte random, auto-generated into `.env` (§4.6) |
 | `MONGRELDB_PASSPHRASE` | *(generated)* | At-rest encryption passphrase; 32-byte random, auto-generated into `.env` (§4.6) |
-| `REDI_MASTER_KEY` | — (else keyfile) | 32-byte secret-encryption key |
+| `REDI_MASTER_KEY` | - (else keyfile) | 32-byte secret-encryption key |
 | `REDI_SETUP_TOKEN` | *(generated)* | One-time token required to claim a fresh installation |
-| `SESSION_SECRET` | — (else derived from master key) | Cookie HMAC key |
+| `SESSION_SECRET` | - (else derived from master key) | Cookie HMAC key |
 | `TRUST_PROXY_HOPS` | `0` | Number of reverse proxies trusted to append `X-Forwarded-For` |
 | `SCHEDULER_ENABLED` | `true` | In-process scheduler on/off |
-| `CRON_SECRET` | — (generatable in UI) | `POST /api/cron/tick` shared secret |
+| `CRON_SECRET` | - (generatable in UI) | `POST /api/cron/tick` shared secret |
 | `LOG_LEVEL` | `info` | |
 | `TZ` | auto-detected in wizard | Default timezone fallback |
 
@@ -163,12 +163,10 @@ There is no in-app backup machinery in v1.
 
 | artifact | pin |
 |---|---|
-| MongrelDB engine/server | `v0.59.0` (WAL v4) |
-| `@visorcraft/mongreldb` | `0.59.0` |
-| `@visorcraft/mongreldb-kit` | `0.59.0` |
-| `ghcr.io/visorcraft/mongreldb-server` | `v0.59.0` |
-
-MongrelDB v0.59.0 accepts only WAL v4 storage. **Do not downgrade an image or package against an existing data directory.**
+| MongrelDB engine/server | `v0.60.0` |
+| `@visorcraft/mongreldb` | `0.60.0` |
+| `@visorcraft/mongreldb-kit` | `0.60.0` |
+| `ghcr.io/visorcraft/mongreldb-server` | `v0.60.0` |
 
 ## Development
 
@@ -190,7 +188,5 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the develo
 Please report vulnerabilities privately. See [SECURITY.md](SECURITY.md) for supported versions and reporting instructions.
 
 ## License
-
-Copyright © 2026 VisorCraft.
 
 Redi is licensed under the [GNU General Public License v3.0 only](LICENSE).

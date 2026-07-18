@@ -32,7 +32,7 @@ export function TwilioStep({ settings, onComplete = async () => {}, busy = false
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold text-[#1F2D50]">Text messages (Twilio)</h1>
       <p className="text-sm text-[#1F2D50]/70">
-        Optional — skip this if email is enough. On a Twilio trial account, texts only go to verified numbers.
+        Optional - skip this if email is enough. On a Twilio trial account, texts only go to verified numbers.
       </p>
       <TextField label="Account SID" value={accountSid} onChange={setAccountSid} placeholder="AC…" />
       <PasswordField label="Auth token" value={authToken} onChange={setAuthToken}

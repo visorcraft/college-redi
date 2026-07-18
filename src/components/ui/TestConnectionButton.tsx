@@ -25,7 +25,7 @@ export function TestConnectionButton({ endpoint, label = 'Test connection', show
   }
 
   const tone = !result ? '' : result.ok ? (result.warning ? 'bg-amber-50 text-amber-900' : 'bg-emerald-50 text-emerald-900') : 'bg-red-50 text-red-900';
-  const text = result ? (result.ok ? (result.warning ?? result.message ?? 'Connected — looks good!') : (result.message ?? 'Connection failed.')) : '';
+  const text = result ? (result.ok ? (result.warning ?? result.message ?? 'Connected - looks good!') : (result.message ?? 'Connection failed.')) : '';
 
   return (
     <div className="flex flex-col gap-2">

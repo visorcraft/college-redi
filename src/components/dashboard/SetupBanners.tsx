@@ -14,7 +14,7 @@ export default async function SetupBanners() {
       { actor: 'user' },
     );
   } catch {
-    status = null; // status tool unavailable — banners still work from settings alone
+    status = null; // status tool unavailable - banners still work from settings alone
   }
   const banners = buildBanners(settings, status);
   if (banners.length === 0) return null;

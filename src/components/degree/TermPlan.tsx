@@ -9,7 +9,7 @@ const STATUSES = ['planned', 'registered', 'waitlisted', 'dropped', 'completed']
 function windowBadge(w: RegistrationStatusResult['window']): string {
   if (w.state === 'not_scheduled') return 'window not scheduled';
   if (w.state === 'upcoming') return `registration opens in ${w.days_until_open}d`;
-  if (w.state === 'open') return w.days_until_close !== null ? `registration open — closes in ${w.days_until_close}d` : 'registration open';
+  if (w.state === 'open') return w.days_until_close !== null ? `registration open - closes in ${w.days_until_close}d` : 'registration open';
   return 'registration closed';
 }
 
@@ -146,7 +146,7 @@ function TermCard({ term, programId, courses, planned, onChanged }: { term: Term
         <form onSubmit={addPlanned} aria-label={`plan course for ${term.name}`} className="flex items-end gap-2">
           <label className="text-sm text-[#1F2D50]">Add course
             <select aria-label={`course to plan for ${term.name}`} name="course_id" required className={inputCls + ' mt-1 block'}>
-              <option value="">— pick —</option>
+              <option value="">- pick -</option>
               {addable.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
             </select>
           </label>
@@ -181,7 +181,7 @@ export function TermPlan({ programId, courses, terms, planned, onChanged }: { pr
       {error && <p role="alert" className="text-sm text-[#B3261E]">{error}</p>}
       <div className="space-y-3">
         {terms.map((t) => <TermCard key={t.id} term={t} programId={programId} courses={courses} planned={planned} onChanged={onChanged} />)}
-        {terms.length === 0 && <p className="text-sm text-[#5A6B8C]">No terms yet — add your next semester above.</p>}
+        {terms.length === 0 && <p className="text-sm text-[#5A6B8C]">No terms yet - add your next semester above.</p>}
       </div>
     </section>
   );

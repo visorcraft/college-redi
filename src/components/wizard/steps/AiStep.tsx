@@ -36,9 +36,9 @@ export function AiStep({ settings, onComplete = async () => {}, busy = false, su
       <TextField label="Model" value={model} onChange={setModel} />
       <SelectField label="Effort" value={effort} onChange={(v) => setEffort(v as 'low' | 'medium' | 'high')}
         options={[
-          { value: 'low', label: 'Low — fastest, cheapest' },
-          { value: 'medium', label: 'Medium — balanced (recommended)' },
-          { value: 'high', label: 'High — most thorough, most tokens' },
+          { value: 'low', label: 'Low - fastest, cheapest' },
+          { value: 'medium', label: 'Medium - balanced (recommended)' },
+          { value: 'high', label: 'High - most thorough, most tokens' },
         ]} />
       <TestConnectionButton
         endpoint="/api/settings/test/ai"

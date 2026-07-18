@@ -4,13 +4,13 @@ export interface WizardStepDef { n: number; id: string; title: string; skippable
 
 export const WIZARD_STEPS: readonly WizardStepDef[] = [
   { n: 1, id: 'welcome', title: 'Welcome', skippable: false,
-    redi: "Hi, I'm Redi ☁️ — I keep your degree on track. I plan your courses, watch registration windows, chase missing paperwork, and read your college email so you don't have to." },
+    redi: "Hi, I'm Redi ☁️ - I keep your degree on track. I plan your courses, watch registration windows, chase missing paperwork, and read your college email so you don't have to." },
   { n: 2, id: 'login', title: 'Your login', skippable: false,
-    redi: 'First, a password. This is a private, one-person app — this keeps it that way.' },
+    redi: 'First, a password. This is a private, one-person app - this keeps it that way.' },
   { n: 3, id: 'ai', title: 'AI brain', skippable: true,
     redi: 'This is what lets me think and talk.' },
   { n: 4, id: 'imap', title: 'College email', skippable: true,
-    redi: 'I check this inbox every few minutes and pull out what matters. Read-only, always — I never write to your mailbox.' },
+    redi: 'I check this inbox every few minutes and pull out what matters. Read-only, always - I never write to your mailbox.' },
   { n: 5, id: 'smtp', title: 'Personal email', skippable: true,
     redi: 'Where should I send summaries and reminders? Your everyday email is perfect.' },
   { n: 6, id: 'twilio', title: 'Text messages', skippable: true,

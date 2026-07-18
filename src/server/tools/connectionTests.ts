@@ -213,7 +213,7 @@ const testImapConnection = {
 };
 
 const HELLO_SUBJECT = '☁️ Redi: hello from Redi';
-const HELLO_BODY = "Hi! It's Redi ☁️ — your setup worked. I'll send your college-email summaries and reminders here.";
+const HELLO_BODY = "Hi! It's Redi ☁️ - your setup worked. I'll send your college-email summaries and reminders here.";
 
 const testSmtpConnection = {
   name: 'test_smtp_connection',
@@ -233,7 +233,7 @@ const testTwilioConnection = {
   paramsSchema: TestTwilioConnectionParamsSchema,
   jsonSchema: z.toJSONSchema(TestTwilioConnectionParamsSchema) as Record<string, unknown>,
   async handler(_ctx: Ctx, params: TwilioTestParams) {
-    return sendTwilioSms('☁️ Redi: test message — your SMS notifications are working.', params);
+    return sendTwilioSms('☁️ Redi: test message - your SMS notifications are working.', params);
   },
 };
 
@@ -262,7 +262,7 @@ const sendTestNotification = {
       const res = await sendSmtpMail('☁️ Redi: test notification', 'This is a test notification from Redi. Email delivery works.');
       return res.ok ? { ok: true as const, channel: 'email' as const, message_id: res.message_id, sent_to: res.sent_to } : res;
     }
-    const res = await sendTwilioSms('☁️ Redi: test notification — SMS delivery works.');
+    const res = await sendTwilioSms('☁️ Redi: test notification - SMS delivery works.');
     return res.ok ? { ok: true as const, channel: 'sms' as const, message_sid: res.message_sid } : res;
   },
 };

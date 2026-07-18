@@ -248,7 +248,7 @@ export function ChatBubble({
     } catch (error) {
       setMessages((current) => current.slice(0, -1));
       setErrorText(
-        error instanceof Error ? error.message : 'Redi hit a snag — try again.',
+        error instanceof Error ? error.message : 'Redi hit a snag - try again.',
       );
     } finally {
       setBusy(false);

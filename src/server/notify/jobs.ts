@@ -178,14 +178,14 @@ export async function runDailyDigestJob(
   if (upcoming.length > 0) {
     lines.push('Coming up this week:');
     for (const t of upcoming) {
-      lines.push(`• ${t.title} — due ${localDateKey(new Date(t.due_at!), timeZone)}`);
+      lines.push(`• ${t.title} - due ${localDateKey(new Date(t.due_at!), timeZone)}`);
     }
   }
   return withSqlTransaction(async () => {
     signal?.throwIfAborted();
     await enqueueNotification({
       type: 'digest',
-      title: `☁️ Your daily digest — ${stamp}`,
+      title: `☁️ Your daily digest - ${stamp}`,
       body: lines.join('\n'),
       importance: 'low',
       channels: ['in_app', 'email'],

@@ -147,7 +147,7 @@ describe('daily digest (spec §6.5.2)', () => {
     expect(body).toContain('Your Redi digest for 2026-03-08');
     expect(body.indexOf('Due today:')).toBeLessThan(body.indexOf('Local Sunday'));
     expect(body.indexOf('Coming up this week:')).toBeLessThan(body.indexOf('Local Monday'));
-    expect(body).toContain('Local Monday — due 2026-03-09');
+    expect(body).toContain('Local Monday - due 2026-03-09');
   });
 });
 

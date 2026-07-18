@@ -40,7 +40,7 @@ export async function getDb(): Promise<AppDb> {
       );
     } else if (code === 'MONGRELDB_DATABASE_LOCKED') {
       throw new Error(
-        `MongrelDB at ${cfg.MONGRELDB_PATH} is locked — another Redi/MongrelDB process owns it (spec §13). ` +
+        `MongrelDB at ${cfg.MONGRELDB_PATH} is locked - another Redi/MongrelDB process owns it (spec §13). ` +
           'Stop the other process, or run with DATABASE_MODE=remote against a daemon.',
       );
     } else {
