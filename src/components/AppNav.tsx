@@ -15,6 +15,10 @@ const LINKS = [
 
 export function AppNav() {
   if (usePathname() === '/wizard') return null;
+  const signOut = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', redirect: 'manual' });
+    window.location.assign('/login');
+  };
   return (
     <header className="sticky top-0 z-30 border-b border-[#1F2D50]/10 bg-[#EAF3FB]/95 backdrop-blur">
       <nav
@@ -36,14 +40,13 @@ export function AppNav() {
           ))}
         </div>
         <NotificationBell />
-        <form action="/api/auth/logout" method="post" className="shrink-0">
-          <button
-            type="submit"
-            className="rounded-xl border border-[#1F2D50]/30 px-3 py-2 text-sm font-medium text-[#1F2D50] hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#FFC24B]"
-          >
-            Sign out
-          </button>
-        </form>
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          className="shrink-0 rounded-xl border border-[#1F2D50]/30 px-3 py-2 text-sm font-medium text-[#1F2D50] hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#FFC24B]"
+        >
+          Sign out
+        </button>
       </nav>
     </header>
   );

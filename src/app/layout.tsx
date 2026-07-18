@@ -11,6 +11,7 @@ import { readSessionToken, SESSION_COOKIE } from '@/server/auth';
 export const metadata: Metadata = {
   title: 'Redi',
   description: 'Your degree-planning cloud companion',
+  icons: { icon: '/redi-cloud.svg' },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -30,7 +31,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen antialiased">
         <CsrfInit />
         {authenticated && <AppNav />}
-        {children}
+        {authenticated ? <div className="pb-24">{children}</div> : children}
         <RediWidget aiConfigured={aiConfigured} pollStatus={authenticated} />
       </body>
     </html>

@@ -81,7 +81,33 @@ export function ImapStep({ settings, onComplete = async () => {}, busy = false, 
           <CheckboxField label="Monitoring enabled" checked={enabled} onChange={setEnabled} />
         </>
       )}
-      <TestConnectionButton endpoint="/api/settings/test/imap" showRedi />
+      <TestConnectionButton
+        endpoint="/api/settings/test/imap"
+        showRedi
+        beforeRun={async () => {
+          if (password) {
+            await apiFetch('/api/settings/secret', {
+              method: 'PUT',
+              body: { name: 'imap.password', value: password },
+            });
+          }
+          await apiFetch('/api/settings', {
+            method: 'PATCH',
+            body: {
+              imap: {
+                ...imap,
+                host,
+                port: Number(port),
+                tls,
+                username,
+                mailbox,
+                enabled,
+                poll_interval_minutes: Number(poll),
+              },
+            },
+          });
+        }}
+      />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>
     </div>

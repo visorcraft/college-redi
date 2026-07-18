@@ -3,8 +3,12 @@ import Link from 'next/link';
 const sections = [
   ['AI', 'Configure Redi’s model and provider.', '/settings/ai'],
   ['College email', 'Connect the inbox Redi monitors.', '/settings/imap'],
+  ['Personal email', 'Choose where Redi sends summaries.', '/settings/smtp'],
+  ['Text messages', 'Configure optional SMS alerts.', '/settings/twilio'],
   ['Notifications', 'Choose how and when Redi reaches you.', '/settings/notifications'],
   ['AI agent access', 'Let Claude, Kimi CLI, and other agents drive Redi over MCP.', '/settings/agent'],
+  ['Security', 'Change your Redi password.', '/settings/security'],
+  ['Status', 'Check Redi’s services and connections.', '/settings/status'],
 ] as const;
 
 export default function SettingsPage() {

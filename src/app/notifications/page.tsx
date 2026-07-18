@@ -56,6 +56,7 @@ export default function NotificationsPage() {
       headers: csrfHeaders(),
     });
     await load();
+    window.dispatchEvent(new Event('redi:notifications-changed'));
   };
   const markAll = async () => {
     await fetch('/api/notifications/read-all', {
@@ -63,6 +64,7 @@ export default function NotificationsPage() {
       headers: csrfHeaders(),
     });
     await load();
+    window.dispatchEvent(new Event('redi:notifications-changed'));
   };
   const schedule = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

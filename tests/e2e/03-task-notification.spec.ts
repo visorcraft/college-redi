@@ -62,6 +62,9 @@ test('task creation and cron tick produce an in-app reminder', async ({ page }) 
   await page.goto('/notifications');
   await expect(page.getByText(/Advising appointment/i).first())
     .toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'Mark all read' }).click();
+  await expect(page.getByRole('link', { name: 'Notifications, 0 unread' }))
+    .toBeVisible();
 
   const reminder = page.getByRole('region', { name: 'Schedule a reminder' });
   await reminder.getByLabel('Title').fill('Call financial aid');
@@ -75,4 +78,10 @@ test('task creation and cron tick produce an in-app reminder', async ({ page }) 
   await reminder.getByLabel('In app').check();
   await reminder.getByRole('button', { name: 'Schedule reminder' }).click();
   await expect(reminder.getByRole('status')).toHaveText('Reminder scheduled.');
+
+  await page.goto('/email');
+  await page.getByRole('button', { name: 'Check now' }).click();
+  await expect(page.getByText(
+    'College inbox is not connected yet. Set it up in Settings.',
+  )).toBeVisible();
 });

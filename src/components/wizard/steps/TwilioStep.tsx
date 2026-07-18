@@ -40,7 +40,31 @@ export function TwilioStep({ settings, onComplete = async () => {}, busy = false
       <TextField label="Twilio from-number" value={fromNumber} onChange={setFromNumber} type="tel" placeholder="+15551234567" />
       <TextField label="Your mobile number" value={toNumber} onChange={setToNumber} type="tel" placeholder="+15557654321" />
       {variant === 'settings' && <CheckboxField label="SMS delivery enabled" checked={enabled} onChange={setEnabled} />}
-      <TestConnectionButton endpoint="/api/settings/test/twilio" label="Send test SMS" showRedi />
+      <TestConnectionButton
+        endpoint="/api/settings/test/twilio"
+        label="Send test SMS"
+        showRedi
+        beforeRun={async () => {
+          if (authToken) {
+            await apiFetch('/api/settings/secret', {
+              method: 'PUT',
+              body: { name: 'twilio.auth_token', value: authToken },
+            });
+          }
+          await apiFetch('/api/settings', {
+            method: 'PATCH',
+            body: {
+              twilio: {
+                ...twilio,
+                account_sid: accountSid,
+                from_number: fromNumber,
+                to_number: toNumber,
+                enabled,
+              },
+            },
+          });
+        }}
+      />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>
     </div>

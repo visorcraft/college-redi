@@ -67,10 +67,23 @@ export default function EmailPage() {
     setChecking(true);
     setNotice('');
     try {
-      const result = await apiFetch('/api/email/check', { method: 'POST' });
-      setNotice(result.configured === false
-        ? 'College inbox is not connected yet. Set it up in Settings.'
-        : `Checked: ${result.fetched} new · ${result.actionable} actionable · ${result.junk} junk.`);
+      const result = await apiFetch('/api/email/check', { method: 'POST' }) as {
+        configured?: boolean;
+        fetched?: number;
+        actionable?: number;
+        junk?: number;
+        ran?: boolean;
+        reason?: string;
+      };
+      if (result.configured === false || result.reason === 'unconfigured') {
+        setNotice('College inbox is not connected yet. Set it up in Settings.');
+      } else if (result.ran === false) {
+        setNotice('A college inbox check is already running. Try again in a moment.');
+      } else {
+        setNotice(
+          `Checked: ${result.fetched ?? 0} new · ${result.actionable ?? 0} actionable · ${result.junk ?? 0} junk.`,
+        );
+      }
     } catch {
       setNotice('Check failed. See Settings → Status.');
     }

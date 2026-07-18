@@ -8,11 +8,6 @@ import {
 } from './helpers';
 
 test('wizard happy path configures login, AI, checklist, and defaults', async ({ page }) => {
-  await page.route('**/api/settings/test/ai', (route) => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ ok: true, message: 'Connected. Looks good!' }),
-  }));
   const response = await page.goto('/');
   await expect(page).toHaveURL(/\/wizard$/);
   expect(response?.headers()['content-security-policy']).toContain("'nonce-");

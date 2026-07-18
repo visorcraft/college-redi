@@ -121,6 +121,7 @@ export default function DegreeDashboard() {
 
   const run = useCallback((fn: () => Promise<void>) => fn().catch((e) => setError(e instanceof Error ? e.message : String(e))), []);
   const chooseProgram = useCallback((id: string | null) => {
+    if (id === selectedProgram.current) return;
     selectedProgram.current = id;
     selectionGeneration.current += 1;
     detailRequest.current += 1;

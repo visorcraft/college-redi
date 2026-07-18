@@ -45,4 +45,7 @@ test('agent token connects a real MCP client', async ({ page }) => {
     },
   });
   expect(unauthorized.status()).toBe(401);
+
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL(/\/login$/);
 });

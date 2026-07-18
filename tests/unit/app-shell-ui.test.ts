@@ -49,6 +49,20 @@ describe('authenticated app shell and dashboard', () => {
     expect(cards).toContain('<ProgressRing progress={progress} />');
   });
 
+  it('links every settings section from the settings landing page', () => {
+    const source = readFileSync('src/app/settings/page.tsx', 'utf8');
+    for (const path of [
+      '/settings/ai',
+      '/settings/imap',
+      '/settings/smtp',
+      '/settings/twilio',
+      '/settings/notifications',
+      '/settings/agent',
+      '/settings/security',
+      '/settings/status',
+    ]) expect(source).toContain(path);
+  });
+
   it('allows narrow email content to wrap instead of widening the viewport', () => {
     const source = readFileSync('src/app/email/page.tsx', 'utf8');
     expect(source).toContain('min-w-0 max-w-3xl');

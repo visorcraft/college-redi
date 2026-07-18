@@ -40,7 +40,22 @@ export function AiStep({ settings, onComplete = async () => {}, busy = false, su
           { value: 'medium', label: 'Medium — balanced (recommended)' },
           { value: 'high', label: 'High — most thorough, most tokens' },
         ]} />
-      <TestConnectionButton endpoint="/api/settings/test/ai" showRedi />
+      <TestConnectionButton
+        endpoint="/api/settings/test/ai"
+        showRedi
+        beforeRun={async () => {
+          if (apiKey) {
+            await apiFetch('/api/settings/secret', {
+              method: 'PUT',
+              body: { name: 'ai.api_key', value: apiKey },
+            });
+          }
+          await apiFetch('/api/settings', {
+            method: 'PATCH',
+            body: { ai: { ...ai, base_url: baseUrl, model, effort } },
+          });
+        }}
+      />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>
     </div>

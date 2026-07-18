@@ -21,9 +21,11 @@ export function NotificationBell() {
     };
     void load();
     const timer = setInterval(() => void load(), 60_000);
+    window.addEventListener('redi:notifications-changed', load);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      window.removeEventListener('redi:notifications-changed', load);
     };
   }, [pathname]);
 

@@ -15,6 +15,10 @@ test('degree audit import creates a visible program', async ({ page }) => {
   await page.getByRole('button', { name: /looks right.*import/i }).click();
   await expect(page.getByLabel('program', { exact: true }))
     .toContainText('Edited Computer Science', { timeout: 15_000 });
+  await page.getByLabel('program', { exact: true })
+    .selectOption({ label: 'Edited Computer Science' });
+  await expect(page.getByRole('img', { name: /degree 0% complete/i }))
+    .toBeVisible();
   await expect(page.getByText(/CS 101 · Computing Foundations/))
     .toBeVisible({ timeout: 15_000 });
 });

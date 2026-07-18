@@ -77,7 +77,34 @@ export function SmtpStep({ settings, onComplete = async () => {}, busy = false, 
       <TextField label="Your personal email" value={personalEmail} onChange={setPersonalEmail} type="email"
         hint="Summaries and reminders land here." />
       {variant === 'settings' && <CheckboxField label="Email delivery enabled" checked={enabled} onChange={setEnabled} />}
-      <TestConnectionButton endpoint="/api/settings/test/smtp" label="Send test email" showRedi />
+      <TestConnectionButton
+        endpoint="/api/settings/test/smtp"
+        label="Send test email"
+        showRedi
+        beforeRun={async () => {
+          if (password) {
+            await apiFetch('/api/settings/secret', {
+              method: 'PUT',
+              body: { name: 'smtp.password', value: password },
+            });
+          }
+          await apiFetch('/api/settings', {
+            method: 'PATCH',
+            body: {
+              smtp: {
+                ...smtp,
+                host,
+                port: Number(port),
+                security,
+                username,
+                from_address: fromAddress,
+                personal_email: personalEmail,
+                enabled,
+              },
+            },
+          });
+        }}
+      />
       <p className="text-xs text-[#1F2D50]/60">The test sends a real &quot;hello from Redi ☁️&quot; message to your personal address.</p>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <PrimaryButton onClick={save} disabled={busy}>{submitLabel}</PrimaryButton>
