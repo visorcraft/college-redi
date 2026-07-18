@@ -17,6 +17,55 @@
 
 ---
 
+## Quick Start
+
+### Docker
+
+```bash
+git clone https://github.com/visorcraft/college-redi.git
+cd college-redi
+install -d -m 700 redi-data
+docker compose up -d --build
+```
+
+### Podman
+
+```bash
+git clone https://github.com/visorcraft/college-redi.git
+cd college-redi
+install -d -m 700 redi-data
+podman compose up -d --build
+```
+
+The locally built all-in-one image uses embedded MongrelDB and publishes Redi
+only on `127.0.0.1:3000`. The included
+`docker-compose.yml` also works with `podman-compose`. Open
+http://localhost:3000 and finish the first-run wizard.
+
+### Local development
+
+```bash
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Open http://localhost:3000 and finish the first-run wizard.
+
+### Daemon mode
+
+```bash
+DATA_DIR=./redi-data ./scripts/bootstrap-env.sh
+set -a; . ./redi-data/.env; set +a
+docker compose -f docker-compose.daemon.yml up -d
+```
+
+`mongreldb-server` binds loopback only, so plain `-p 8453:8453` mapping cannot reach it. The compose file uses host networking and documents an advanced `socat` bridge-network variant. Run exactly one MongrelDB process per data directory.
+
+## Built with Codex & GPT-5.6
+
+I built Redi with Codex and GPT-5.6 as a hands-on coding partner, using Next.js, React, TypeScript, and encrypted MongrelDB storage. The hardest parts were turning messy degree audits, course plans, emails, and administrative requirements into consistent information, then getting multi-turn chat and tool calls to behave the way a student would expect. After plenty of debugging, it came together as a private, self-hosted app that keeps the useful parts in one place without treating student data as an afterthought.
+
 ## Gallery
 
 Every screenshot was captured at 1500 × 1000 pixels (3:2). Click any thumbnail for the full-size image.
@@ -63,55 +112,6 @@ Redi is also the floating navy-blue cloud who leads setup and chats with full ac
 Every capability is implemented once as a typed tool and exposed through REST, Redi chat, and MCP Streamable HTTP at `/mcp`.
 
 Read the story behind the project in [about.md](about.md).
-
-## Quickstart
-
-### Docker
-
-```bash
-git clone https://github.com/visorcraft/college-redi.git
-cd college-redi
-install -d -m 700 redi-data
-docker compose up -d --build
-docker compose exec redi sed -n 's/^REDI_SETUP_TOKEN=//p' /data/.env
-```
-
-### Podman
-
-```bash
-git clone https://github.com/visorcraft/college-redi.git
-cd college-redi
-install -d -m 700 redi-data
-podman compose up -d --build
-podman compose exec redi sed -n 's/^REDI_SETUP_TOKEN=//p' /data/.env
-```
-
-The locally built all-in-one image uses embedded MongrelDB and publishes Redi
-only on `127.0.0.1:3000`. The included
-`docker-compose.yml` also works with `podman-compose`. The `compose exec`
-command reads the setup token inside the root-owned container because the
-host copy at `./redi-data/.env` has mode `0600`.
-
-### Local development
-
-```bash
-cp .env.example .env
-npm install
-npm run dev
-```
-
-Read `REDI_SETUP_TOKEN` from `./data/.env`, then open
-http://localhost:3000 and finish the first-run wizard.
-
-### Daemon mode
-
-```bash
-DATA_DIR=./redi-data ./scripts/bootstrap-env.sh
-set -a; . ./redi-data/.env; set +a
-docker compose -f docker-compose.daemon.yml up -d
-```
-
-`mongreldb-server` binds loopback only, so plain `-p 8453:8453` mapping cannot reach it. The compose file uses host networking and documents an advanced `socat` bridge-network variant. Run exactly one MongrelDB process per data directory.
 
 ## First-boot credentials and encryption
 
