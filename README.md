@@ -17,6 +17,38 @@
 
 ---
 
+## Gallery
+
+Every screenshot was captured at 1500 × 1000 pixels (3:2). Click any thumbnail for the full-size image.
+
+<table>
+  <tr>
+    <td width="33.33%" align="center"><a href="docs/screenshots/01-wizard-welcome.png"><img src="docs/screenshots/01-wizard-welcome.png" width="100%" alt="Welcome step" /><br /><sub><b>Welcome</b></sub></a></td>
+    <td width="33.33%" align="center"><a href="docs/screenshots/02-wizard-login.png"><img src="docs/screenshots/02-wizard-login.png" width="100%" alt="Login setup step" /><br /><sub><b>Your login</b></sub></a></td>
+    <td width="33.33%" align="center"><a href="docs/screenshots/03-wizard-ai.png"><img src="docs/screenshots/03-wizard-ai.png" width="100%" alt="AI setup step" /><br /><sub><b>AI brain</b></sub></a></td>
+  </tr>
+  <tr>
+    <td width="33.33%" align="center"><a href="docs/screenshots/04-wizard-college-email.png"><img src="docs/screenshots/04-wizard-college-email.png" width="100%" alt="College email setup step" /><br /><sub><b>College email</b></sub></a></td>
+    <td width="33.33%" align="center"><a href="docs/screenshots/05-wizard-personal-email.png"><img src="docs/screenshots/05-wizard-personal-email.png" width="100%" alt="Personal email setup step" /><br /><sub><b>Personal email</b></sub></a></td>
+    <td width="33.33%" align="center"><a href="docs/screenshots/06-wizard-text-messages.png"><img src="docs/screenshots/06-wizard-text-messages.png" width="100%" alt="Text message setup step" /><br /><sub><b>Text messages</b></sub></a></td>
+  </tr>
+  <tr>
+    <td width="33.33%" align="center"><a href="docs/screenshots/07-wizard-degree.png"><img src="docs/screenshots/07-wizard-degree.png" width="100%" alt="Degree setup step" /><br /><sub><b>Your degree</b></sub></a></td>
+    <td width="33.33%" align="center"><a href="docs/screenshots/08-wizard-checklist.png"><img src="docs/screenshots/08-wizard-checklist.png" width="100%" alt="Starting checklist step" /><br /><sub><b>Starting checklist</b></sub></a></td>
+    <td width="33.33%" align="center"><a href="docs/screenshots/09-wizard-notifications.png"><img src="docs/screenshots/09-wizard-notifications.png" width="100%" alt="Notification style step" /><br /><sub><b>Notification style</b></sub></a></td>
+  </tr>
+  <tr>
+    <td width="33.33%" align="center"><a href="docs/screenshots/10-wizard-done.png"><img src="docs/screenshots/10-wizard-done.png" width="100%" alt="Completed setup wizard" /><br /><sub><b>Setup complete</b></sub></a></td>
+    <td width="33.33%" align="center"><a href="docs/screenshots/11-app-dashboard.png"><img src="docs/screenshots/11-app-dashboard.png" width="100%" alt="Today dashboard" /><br /><sub><b>Today dashboard</b></sub></a></td>
+    <td width="33.33%" align="center"><a href="docs/screenshots/12-app-tasks.png"><img src="docs/screenshots/12-app-tasks.png" width="100%" alt="Student tasks" /><br /><sub><b>Tasks</b></sub></a></td>
+  </tr>
+  <tr>
+    <td width="33.33%" align="center"><a href="docs/screenshots/13-app-degree.png"><img src="docs/screenshots/13-app-degree.png" width="100%" alt="Degree progress and requirements" /><br /><sub><b>My Degree</b></sub></a></td>
+    <td width="33.33%" align="center"><a href="docs/screenshots/14-app-search.png"><img src="docs/screenshots/14-app-search.png" width="100%" alt="Search results" /><br /><sub><b>Search</b></sub></a></td>
+    <td width="33.33%" align="center"><a href="docs/screenshots/15-app-settings.png"><img src="docs/screenshots/15-app-settings.png" width="100%" alt="Settings overview" /><br /><sub><b>Settings</b></sub></a></td>
+  </tr>
+</table>
+
 ## What is Redi?
 
 Redi is a single-user, self-hosted web app that helps one college student get through their degree without dropping administrative balls. It does four things:
@@ -165,10 +197,10 @@ There is no in-app backup machinery in v1.
 
 | artifact | pin |
 |---|---|
-| MongrelDB engine/server | `v0.60.2` |
-| `@visorcraft/mongreldb` | `0.60.2` |
-| `@visorcraft/mongreldb-kit` | `0.60.2` |
-| `ghcr.io/visorcraft/mongreldb-server` | `v0.60.2` |
+| MongrelDB engine/server | `v0.60.3` |
+| `@visorcraft/mongreldb` | `0.60.3` |
+| `@visorcraft/mongreldb-kit` | `0.60.3` |
+| `ghcr.io/visorcraft/mongreldb-server` | `v0.60.3` |
 
 ## Development
 
