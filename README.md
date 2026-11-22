@@ -197,10 +197,10 @@ There is no in-app backup machinery in v1.
 
 | artifact | pin |
 |---|---|
-| MongrelDB engine/server | `v0.60.3` |
-| `@visorcraft/mongreldb` | `0.60.3` |
-| `@visorcraft/mongreldb-kit` | `0.60.3` |
-| `ghcr.io/visorcraft/mongreldb-server` | `v0.60.3` |
+| MongrelDB engine/server | `v0.66.2` |
+| `@visorcraft/mongreldb` | `0.66.2` |
+| `@visorcraft/mongreldb-kit` | `0.66.2` |
+| `ghcr.io/visorcraft/mongreldb-server` | `v0.66.2` |
 
 ## Development
 
