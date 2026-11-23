@@ -1,6 +1,6 @@
 {
   "name": "redi",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "license": "GPL-3.0-only",
   "packageManager": "npm@12.0.1",
@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
-    "@visorcraft/mongreldb": "0.66.2",
-    "@visorcraft/mongreldb-kit": "0.66.2",
+    "@visorcraft/mongreldb": "0.67.0",
+    "@visorcraft/mongreldb-kit": "0.67.0",
     "apache-arrow": "21.1.0",
     "argon2": "0.44.0",
     "imapflow": "1.7.8",
